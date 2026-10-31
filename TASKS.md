@@ -58,9 +58,10 @@ User decisions (2026-10-31), recorded in ARCHITECTURE.md:
 | 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium [30 FPS, CPU 2.5–3.4 ms, no errors]: joystick, Crouch, Sprint, Jump, Drink disabled without water, Bag disabled labeled Phase 5 verified; multitouch simultaneous move+look+jump, right-zone camera swipe/pinch, portrait/landscape rotation, pull-to-refresh gesture blocking, and Drink at water edge not yet manually tested) |
 | 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [~] (U+T+B pass; D pass on Ultra & Medium [30 FPS, CPU 2.5–3.4 ms, no errors]; terrain ground snap & camera avoidance verified; walking all the way to world boundaries not yet manually tested on device) |
 
-**Recorded polish notes from Phase 3 Group A device test:**
-- [~] **Phase 4 lighting/vegetation polish:** Trees appear too dark under current lighting — addressed in Phase 4 Group A (`Environment` upward-biased foliage normals, bottom-to-top vertex colour gradient, subtle moss emissive lift, and boosted `HemisphereLight`); awaiting M verification on device.
+**Recorded polish notes from Phase 3 Group A & Phase 4 Group A device tests:**
+- [x] **Phase 4 lighting/vegetation polish:** Trees appear too dark under current lighting — verified fixed on Mali-G57 MC2 Medium (`Environment` upward-biased foliage normals, bottom-to-top vertex colour gradient, subtle moss emissive lift, and boosted `HemisphereLight`).
 - [~] **Water polish:** Distant water surface exhibits a subtle grid/box pattern — addressed in `Water.ts` (rotated 3-octave non-collinear ripples, removed extra UV grid offset, added distance ripple attenuation); awaiting M verification on device.
+- [~] **Grass & pine/rock polish (Phase 4 Group A follow-up):** Grass replaced with 9 thin pointed triangular blades per tuft (~0.25–0.50 m tall, varied blade heights & meadow/olive colours, gentle root-anchored wind sway, instanced, off on Low); pine cone tiers changed to open-ended cones (`openEnded = true`) with upward-clamped normals and no self-shadowing bands to fix thin horizontal dark lines between canopy tiers; Phase 2 placeholder grey box pedestal removed and rock polyhedra faceted with mineral/moss tint; awaiting M re-verify on device.
 
 ## Phase 4 — Environment
 
@@ -73,16 +74,16 @@ Split into 3 small session groups to keep each session lightweight:
 
 | # | Task | Verify | Status |
 |---|---|---|---|
-| 4.1 | Procedural pine (3 LODs) + far impostor baked at load; deciduous/dead tree variants | M | [~] (U+T+B pass; awaiting M on Android Chrome) |
-| 4.2 | Rule-based scatter: forest density, clustering, clearings around POIs/rivers/paths | U (rules), M | [~] (U+T+B pass; awaiting M on Android Chrome) |
-| 4.3 | `Environment`: per-chunk-group InstancedMesh, frustum culling, LOD swap, stable instance IDs | D draw calls within budget | [~] (U+T+B pass; awaiting D+M on Android Chrome) |
-| 4.4 | Rocks, bushes (berry + fiber), grass ring with wind shader | M | [~] (U+T+B pass; awaiting M on Android Chrome) |
+| 4.1 | Procedural pine (3 LODs) + far impostor baked at load; deciduous/dead tree variants | M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for pine, deciduous, and far impostor; open-ended cone fix for horizontal seam & dead tree variant awaiting M check) |
+| 4.2 | Rule-based scatter: forest density, clustering, clearings around POIs/rivers/paths | U (rules), M | [x] (U+T+B+M pass on Mali-G57 MC2 Medium) |
+| 4.3 | `Environment`: per-chunk-group InstancedMesh, frustum culling, LOD swap, stable instance IDs | D draw calls within budget | [x] (U+T+B+D+M pass on Mali-G57 MC2 Medium cap 30: 30 FPS, 33.3 ms frame, CPU 3.66 ms, 82 calls, 40.4k tris, 15 MB heap, no errors; Low & High presets not yet manually tested) |
+| 4.4 | Rocks, bushes (berry + fiber), grass ring with wind shader | M | [~] (U+T+B pass; pointed thin grass blades [0.25–0.5 m] + faceted rocks updated, awaiting M re-verify; rocks, berry bushes, Low & High presets not yet manually tested) |
 
 ### Group B — Landmarks and POI structures (Task 4.5)
 
 | # | Task | Verify | Status |
 |---|---|---|---|
-| 4.5 | `Landmarks`: cabins, campsites, caves (rock-shell, shelter flag), watchtower, ruined bridge, with colliders and containers | M | [ ] |
+| 4.5 | `Landmarks`: cabins, campsites, caves (rock-shell, shelter flag), watchtower, ruined bridge, with colliders and containers | M | [~] (U+T+B pass; awaiting M on Android Chrome) |
 
 ### Group C — Sky, day/night, lighting, fog, weather & particles (Tasks 4.6–4.10)
 

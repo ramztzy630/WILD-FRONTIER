@@ -25,6 +25,7 @@ import type { PlayerMoveInput } from "../player/PlayerController.ts";
 import { CollisionWorld } from "../world/Collision.ts";
 import { Environment } from "../world/Environment.ts";
 import { Heightfield } from "../world/Heightfield.ts";
+import { Landmarks } from "../world/Landmarks.ts";
 import { Terrain, type TerrainStats } from "../world/Terrain.ts";
 import { Water } from "../world/Water.ts";
 import { CHUNK_SIZE, WorldGenerator } from "../world/WorldGenerator.ts";
@@ -50,6 +51,7 @@ export class FoundationScene {
   readonly terrain: Terrain;
   readonly water: Water;
   readonly environment: Environment;
+  readonly landmarks: Landmarks;
   readonly player: Player;
   justDrankWater = false;
 
@@ -116,6 +118,15 @@ export class FoundationScene {
     );
     this.environment.warmUp(this.spawnX, this.spawnZ);
 
+    // --- Phase 4 Group B: Procedural Landmarks & POI Structures + Colliders + Containers ---
+    this.landmarks = new Landmarks(
+      scene,
+      assets,
+      this.heightfield,
+      this.collision,
+      defaultPreset,
+    );
+
     // --- Phase 3 Kelompok B: Player (Controller + Camera + CharacterModel + AnimFSM) ---
     this.player = new Player(
       assets,
@@ -154,6 +165,7 @@ export class FoundationScene {
     this.fog.far = Math.max(180, viewMetres * 0.95);
     this.terrain.applyPreset(preset);
     this.environment.applyPreset(preset);
+    this.landmarks.applyPreset(preset);
   }
 
   /** Fixed 60 Hz step driven by `InputManager`. */
@@ -224,6 +236,7 @@ export class FoundationScene {
 
   dispose(): void {
     this.player.dispose();
+    this.landmarks.dispose();
     this.environment.dispose();
     this.terrain.dispose();
     this.water.dispose();
