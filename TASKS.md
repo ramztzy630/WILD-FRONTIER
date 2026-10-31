@@ -49,33 +49,50 @@ User decisions (2026-10-31), recorded in ARCHITECTURE.md:
 | 3.2 | `Heightfield` + `WorldGenerator` macro layout (mountains, valley, lake basin, river splines + carving, boundary ring, POI placement) | U same seed gives identical output | [x] (U pass) |
 | 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M | [x] (U+T+B+M pass on Mali-G57 MC2 Ultra [441 chunks] & Medium [169 chunks], no seam gaps; Low preset not yet manually tested) |
 | 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M | [x] (U+T+B+M+D pass on Mali-G57 MC2: Ultra 60 FPS [441 chunks, 68 calls, ~50k tris] & Medium cap 30 [30 FPS, CPU 1.6–4.4 ms, 50–82 calls, 28–45k tris, 169 chunks, q=0, no errors]; Low preset not yet manually tested) |
-| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; M pass for lake & shoreline on Mali-G57 MC2 Ultra & Medium; rivers, waterfall, and Low preset not yet manually tested) |
+| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; M pass for lake & shoreline on Mali-G57 MC2 Ultra & Medium; non-collinear rotated ripple octaves + distance fade added to fix distant water grid pattern, awaiting M re-verify; rivers, waterfall, and Low preset not yet manually tested) |
 | 3.6 | `Collision`: spatial hash (circles, boxes), push-out resolution | U | [x] (U pass) |
-| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for Idle, Walk, Run, Sprint, Crouch, ground snap; Jump, swim, and world-boundary walk not yet manually tested on device) |
+| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for Idle, Walk, Run, Sprint, Crouch, Jump, ground snap; swim and world-boundary walk not yet manually tested on device) |
 | 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips | [x] (U+T+B+M pass on Mali-G57 MC2 Medium: third-person orbit follow & terrain/collider avoidance verified, 30 FPS, no errors) |
-| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for Idle, Walk, Run, Sprint, Crouch, Gather pose; Jump/Fall/Land, Drink, and Swim poses not yet manually tested on device) |
+| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for Idle, Walk, Run, Sprint, Crouch, Jump/Fall/Land, Gather pose; Drink and Swim poses not yet manually tested on device) |
 | 3.10 | `KeyboardMouseInput` (WASD, Space, Shift, E, I, C, Esc, pointer lock) | M (desktop; may be untested, see R2) | [~] (U+T+B pass; desktop browser M untested on Termux per R2) |
-| 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [~] (U+T+B pass for dead-zone, direction mapping, per-pointerId multitouch & pinch-zoom; awaiting M on Android Chrome) |
-| 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [~] (U+T+B pass; D pass on Ultra & Medium for chunk streaming; awaiting M on device for full TouchControlsUI walk to boundaries) |
+| 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium [30 FPS, CPU 2.5–3.4 ms, no errors]: joystick, Crouch, Sprint, Jump, Drink disabled without water, Bag disabled labeled Phase 5 verified; multitouch simultaneous move+look+jump, right-zone camera swipe/pinch, portrait/landscape rotation, pull-to-refresh gesture blocking, and Drink at water edge not yet manually tested) |
+| 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [~] (U+T+B pass; D pass on Ultra & Medium [30 FPS, CPU 2.5–3.4 ms, no errors]; terrain ground snap & camera avoidance verified; walking all the way to world boundaries not yet manually tested on device) |
 
-**Recorded polish notes from Phase 3 Group A device test (deferred — do not work on now):**
-- [ ] **Phase 4 lighting/vegetation polish:** Trees appear too dark under current lighting (address in Phase 4 with `Environment` tree shading and `DayNightCycle` hemisphere/sun lighting).
-- [ ] **Water polish:** Distant water surface exhibits a subtle grid/box pattern (address during shader/visual polish).
+**Recorded polish notes from Phase 3 Group A device test:**
+- [~] **Phase 4 lighting/vegetation polish:** Trees appear too dark under current lighting — addressed in Phase 4 Group A (`Environment` upward-biased foliage normals, bottom-to-top vertex colour gradient, subtle moss emissive lift, and boosted `HemisphereLight`); awaiting M verification on device.
+- [~] **Water polish:** Distant water surface exhibits a subtle grid/box pattern — addressed in `Water.ts` (rotated 3-octave non-collinear ripples, removed extra UV grid offset, added distance ripple attenuation); awaiting M verification on device.
 
 ## Phase 4 — Environment
 
-| # | Task | Verify |
-|---|---|---|
-| 4.1 | Procedural pine (3 LODs) + far impostor baked at load; deciduous/dead tree variants | M |
-| 4.2 | Rule-based scatter: forest density, clustering, clearings around POIs/rivers/paths | U (rules), M |
-| 4.3 | `Environment`: per-chunk-group InstancedMesh, frustum culling, LOD swap, stable instance IDs | D draw calls within budget |
-| 4.4 | Rocks, bushes (berry + fiber), grass ring with wind shader | M |
-| 4.5 | `Landmarks`: cabins, campsites, caves (rock-shell, shelter flag), watchtower, ruined bridge, with colliders and containers | M |
-| 4.6 | `Sky`: dome shader with gradient, sun/moon discs, stars | M |
-| 4.7 | `DayNightCycle`: keyframed palettes, smooth interpolation, sun/moon light swap, shadow frustum follow | U (palette interpolation), M |
-| 4.8 | `Weather`: Clear/Cloudy/Fog/Rain FSM, 60 s cross-fades, wind strength drives the shaders | U (FSM), M |
-| 4.9 | `Particles`: pooled rain, mist, dust/pollen, embers with preset caps | D |
-| 4.10 | Gate: world looks composed rather than random scatter (user visual review); smooth transitions; budgets measured | M D |
+Split into 3 small session groups to keep each session lightweight:
+- **Group A (Tasks 4.1–4.4):** Procedural vegetation (pine 3 LODs + far impostor, deciduous, dead trees), rule-based scatter & clearings, chunk-grouped `InstancedMesh` with frustum culling & LOD swap, rocks, bushes (berry + fiber), and player-centred grass ring with wind shader.
+- **Group B (Task 4.5):** `Landmarks` and POI structures (cabins, campsites, rock-shell caves with shelter flag, watchtower, ruined bridge) with colliders and loot containers.
+- **Group C (Tasks 4.6–4.10):** `Sky` dome shader, `DayNightCycle` keyframed palettes & sun/moon lighting, `Weather` FSM & transitions, `Particles` (pooled rain, mist, dust/pollen, embers), and Phase 4 verification gate.
+
+### Group A — Forests, vegetation, rocks, instancing & LOD (Tasks 4.1–4.4)
+
+| # | Task | Verify | Status |
+|---|---|---|---|
+| 4.1 | Procedural pine (3 LODs) + far impostor baked at load; deciduous/dead tree variants | M | [~] (U+T+B pass; awaiting M on Android Chrome) |
+| 4.2 | Rule-based scatter: forest density, clustering, clearings around POIs/rivers/paths | U (rules), M | [~] (U+T+B pass; awaiting M on Android Chrome) |
+| 4.3 | `Environment`: per-chunk-group InstancedMesh, frustum culling, LOD swap, stable instance IDs | D draw calls within budget | [~] (U+T+B pass; awaiting D+M on Android Chrome) |
+| 4.4 | Rocks, bushes (berry + fiber), grass ring with wind shader | M | [~] (U+T+B pass; awaiting M on Android Chrome) |
+
+### Group B — Landmarks and POI structures (Task 4.5)
+
+| # | Task | Verify | Status |
+|---|---|---|---|
+| 4.5 | `Landmarks`: cabins, campsites, caves (rock-shell, shelter flag), watchtower, ruined bridge, with colliders and containers | M | [ ] |
+
+### Group C — Sky, day/night, lighting, fog, weather & particles (Tasks 4.6–4.10)
+
+| # | Task | Verify | Status |
+|---|---|---|---|
+| 4.6 | `Sky`: dome shader with gradient, sun/moon discs, stars | M | [ ] |
+| 4.7 | `DayNightCycle`: keyframed palettes, smooth interpolation, sun/moon light swap, shadow frustum follow | U (palette interpolation), M | [ ] |
+| 4.8 | `Weather`: Clear/Cloudy/Fog/Rain FSM, 60 s cross-fades, wind strength drives the shaders | U (FSM), M | [ ] |
+| 4.9 | `Particles`: pooled rain, mist, dust/pollen, embers with preset caps | D | [ ] |
+| 4.10 | Gate: world looks composed rather than random scatter (user visual review); smooth transitions; budgets measured | M D | [ ] |
 
 ## Phase 5 — Gameplay systems
 

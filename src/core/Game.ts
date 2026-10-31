@@ -91,7 +91,12 @@ export class Game {
     });
 
     this.states = new GameStateMachine((to, from) => this.onStateChanged(to, from));
-    this.world = new FoundationScene(this.sceneManager.scene, this.assets, options.seed);
+    this.world = new FoundationScene(
+      this.sceneManager.scene,
+      this.assets,
+      options.seed,
+      this.sceneManager.webgl,
+    );
 
     this.input = new InputManager(this.device.mobile || this.device.touch);
     this.input.setGameplayEnabled(false);

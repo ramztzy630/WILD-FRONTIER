@@ -142,20 +142,29 @@ const SURFACE_FRAG = /* glsl */ `
   varying float vDepth;
   varying float vFogDepth;
 
-  // Cheap procedural dual-layer ripple pattern
+  // Non-collinear multi-layer ripple pattern (rotated octaves avoid axis-aligned grid artifacts)
   float ripple(vec2 p) {
-    vec2 uv1 = p * 0.42 + vec2(uTime * 0.08, -uTime * (0.12 + uFlowSpeed * 0.35));
-    vec2 uv2 = p * 0.67 + vec2(-uTime * 0.06, -uTime * (0.09 + uFlowSpeed * 0.25));
-    float r1 = sin(uv1.x * 6.2831) * cos(uv1.y * 6.2831);
-    float r2 = sin((uv2.x + uv2.y) * 6.2831) * cos((uv2.x - uv2.y) * 6.2831);
-    return (r1 + r2) * 0.5;
+    vec2 uv1 = p * 0.24 + vec2(uTime * 0.08, -uTime * (0.12 + uFlowSpeed * 0.35));
+    // Rotate second octave by ~37 degrees so wave crests never form a rectangular box grid
+    vec2 rotP = vec2(p.x * 0.7986 - p.y * 0.6018, p.x * 0.6018 + p.y * 0.7986);
+    vec2 uv2 = rotP * 0.37 + vec2(-uTime * 0.06, -uTime * (0.09 + uFlowSpeed * 0.25));
+    // Third broad swell at another oblique angle
+    vec2 rotP3 = vec2(p.x * 0.3420 + p.y * 0.9397, -p.x * 0.9397 + p.y * 0.3420);
+    vec2 uv3 = rotP3 * 0.13 + vec2(uTime * 0.04, uTime * 0.05);
+
+    float r1 = sin(uv1.x * 6.2831 + sin(uv1.y * 4.5) * 0.65);
+    float r2 = sin(uv2.y * 6.2831 + cos(uv2.x * 4.2) * 0.65);
+    float r3 = cos(uv3.x * 6.2831 + uv3.y * 3.1415);
+    return (r1 * 0.42 + r2 * 0.38 + r3 * 0.20);
   }
 
   void main() {
     if (vDepth <= 0.005) discard;
 
-    float rip = ripple(vWorldPos.xz + vUv * 6.0);
-    vec3 N = normalize(vNormal + vec3(rip * 0.09, 0.0, rip * 0.09));
+    // Fade high-frequency surface ripples with distance so far water never Moire-aliases on mobile
+    float distAtten = 1.0 - smoothstep(28.0, 175.0, vFogDepth);
+    float rip = ripple(vWorldPos.xz) * distAtten;
+    vec3 N = normalize(vNormal + vec3(rip * 0.085, 0.0, rip * 0.085));
     vec3 V = normalize(cameraPosition - vWorldPos);
     float NoV = clamp(dot(N, V), 0.0, 1.0);
     float fresnel = pow(1.0 - NoV, 3.0) * 0.65 + 0.12;
@@ -165,7 +174,8 @@ const SURFACE_FRAG = /* glsl */ `
     vec3 col = mix(waterCol, uSkyColor, fresnel);
 
     // Shoreline and river-rapid foam band
-    float shoreFoam = (1.0 - smoothstep(0.04, 0.72, vDepth)) * (0.55 + 0.45 * sin(vWorldPos.x * 1.7 + vWorldPos.z * 1.9 + uTime * 2.6));
+    float shoreWave = sin(vWorldPos.x * 1.15 + sin(vWorldPos.z * 0.95) * 1.4 + uTime * 2.4);
+    float shoreFoam = (1.0 - smoothstep(0.04, 0.72, vDepth)) * (0.55 + 0.45 * shoreWave * distAtten);
     float rapidFoam = uFlowSpeed * smoothstep(0.45, 0.85, rip) * 0.38;
     float foam = clamp(shoreFoam + rapidFoam, 0.0, 1.0);
     col = mix(col, uFoamColor, foam);
