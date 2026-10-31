@@ -118,21 +118,71 @@ describe("Phase 4 Group A: Procedural vegetation & rock geometries (Tasks 4.1 & 
     assert.ok(tris1 > tris2, `expected LOD1 tris (${tris1}) > LOD2 tris (${tris2})`);
     assert.equal(tris2, 4, "LOD2 crossed billboard must be 4 triangles");
 
-    // Verify vertex colours are non-dark and normals are normalized
+    // Verify vertex colours are non-dark and normals are normalized with no downward cone-cap normals
     const col0 = lod0.getAttribute("color");
     const norm0 = lod0.getAttribute("normal");
     let maxGreen = 0;
     for (let i = 0; i < col0.count; i++) {
       const g = col0.getY(i);
       if (g > maxGreen) maxGreen = g;
-      const nLen = Math.hypot(norm0.getX(i), norm0.getY(i), norm0.getZ(i));
+      const ny = norm0.getY(i);
+      assert.ok(ny > -0.1, `pine LOD0 vertex ${i} has downward cap normal ny=${ny}`);
+      const nLen = Math.hypot(norm0.getX(i), ny, norm0.getZ(i));
       assert.ok(Math.abs(nLen - 1) < 1e-3);
     }
     assert.ok(maxGreen > 0.45, `expected sunlit foliage green > 0.45, got ${maxGreen}`);
 
+    // Verify LOD2 billboard UVs reach full [0, 1] vertical range
+    const uv2 = lod2.getAttribute("uv");
+    let maxUvY = 0;
+    for (let i = 0; i < uv2.count; i++) {
+      if (uv2.getY(i) > maxUvY) maxUvY = uv2.getY(i);
+    }
+    assert.ok(maxUvY > 0.99, `expected LOD2 billboard uv.y to reach 1.0, got ${maxUvY}`);
+
     lod0.dispose();
     lod1.dispose();
     lod2.dispose();
+  });
+
+  it("builds thin pointed grass blades (9 blades, height 0.22..0.38m, rooted at y=0)", () => {
+    const grass = buildGrassClumpGeometry();
+    const pos = grass.getAttribute("position");
+    const col = grass.getAttribute("color");
+    const uv = grass.getAttribute("uv");
+    const idx = grass.getIndex()!;
+
+    assert.equal(pos.count, 27, "9 pointed triangular blades = 27 vertices");
+    assert.equal(idx.count, 27, "9 triangles = 27 indices");
+
+    let minTipY = Infinity;
+    let maxTipY = -Infinity;
+    for (let b = 0; b < 9; b++) {
+      const v0 = b * 3;
+      // Base vertices anchored at y = 0 with uv.y = 0
+      assert.equal(pos.getY(v0), 0);
+      assert.equal(pos.getY(v0 + 1), 0);
+      assert.equal(uv.getY(v0), 0);
+      assert.equal(uv.getY(v0 + 1), 0);
+
+      // Blade base width must be thin (< 0.05 m), not a wide cardboard panel
+      const baseW = Math.hypot(
+        pos.getX(v0 + 1) - pos.getX(v0),
+        pos.getZ(v0 + 1) - pos.getZ(v0),
+      );
+      assert.ok(baseW > 0.02 && baseW < 0.05, `expected thin blade width, got ${baseW}`);
+
+      // Tip height in [0.22, 0.38] m
+      const tipY = pos.getY(v0 + 2);
+      if (tipY < minTipY) minTipY = tipY;
+      if (tipY > maxTipY) maxTipY = tipY;
+      assert.ok(uv.getY(v0 + 2) > 0.5, "tip must have positive wind sway weight");
+      assert.ok(col.getY(v0 + 2) > col.getY(v0), "tip must be brighter than root");
+    }
+    assert.ok(minTipY >= 0.22 && maxTipY <= 0.38, `unexpected blade height range ${minTipY}..${maxTipY}`);
+    assert.ok(maxTipY - minTipY >= 0.1, "blades within a tuft must vary in height");
+
+    grass.dispose();
   });
 
   it("builds deciduous, dead tree, boulder, rock, berry/fiber bush, and grass clump geometries", () => {

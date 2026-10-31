@@ -7,18 +7,12 @@
  */
 
 import {
-  BoxGeometry,
   Color,
   DirectionalLight,
-  DodecahedronGeometry,
   Fog,
   Group,
   HemisphereLight,
-  Mesh,
-  MeshLambertMaterial,
-  MeshStandardMaterial,
   Vector3,
-  type Material,
   type PerspectiveCamera,
   type Scene,
   type WebGLRenderer,
@@ -26,7 +20,6 @@ import {
 import type { AssetManager } from "./AssetManager.ts";
 import { getPreset, type GraphicsPreset } from "./GraphicsSettings.ts";
 import type { InputStepState } from "./InputManager.ts";
-import { lerp } from "./math.ts";
 import { Player } from "../player/Player.ts";
 import type { PlayerMoveInput } from "../player/PlayerController.ts";
 import { CollisionWorld } from "../world/Collision.ts";
@@ -37,8 +30,6 @@ import { Water } from "../world/Water.ts";
 import { CHUNK_SIZE, WorldGenerator } from "../world/WorldGenerator.ts";
 
 const SKY = 0xa9b9b4;
-
-type MatKind = "stone" | "ember";
 
 const IDLE_STEP_INPUT: InputStepState = {
   moveX: 0,
@@ -63,29 +54,21 @@ export class FoundationScene {
   justDrankWater = false;
 
   private readonly scene: Scene;
-  private readonly assets: AssetManager;
   private readonly root = new Group();
   private readonly fog: Fog;
   private readonly hemi: HemisphereLight;
   private readonly sun: DirectionalLight;
-  private readonly probe: Mesh;
-  private readonly pedestal: Mesh;
   private standard = false;
 
   private readonly spawnX: number;
   private readonly spawnY: number;
   private readonly spawnZ: number;
-  private readonly pedestalY: number;
 
-  // Fixed-step state of the probe (previous + current for interpolation).
-  private probeAngle = 0;
-  private probePrevAngle = 0;
   private orbit = 0;
   private readonly lookTarget = new Vector3();
 
   constructor(scene: Scene, assets: AssetManager, seed: number, renderer?: WebGLRenderer) {
     this.scene = scene;
-    this.assets = assets;
     scene.background = new Color(SKY);
     this.fog = new Fog(SKY, 45, 360);
     scene.fog = this.fog;
@@ -133,39 +116,6 @@ export class FoundationScene {
     );
     this.environment.warmUp(this.spawnX, this.spawnZ);
 
-    // Place verification pedestal slightly ahead of the player spawn clearing
-    const pedX = this.spawnX + 3.0;
-    const pedZ = this.spawnZ + 3.5;
-    this.pedestalY = this.heightfield.height(pedX, pedZ);
-    this.pedestal = new Mesh(
-      assets.geometry("p2.pedestal", () => {
-        const g = new BoxGeometry(1.6, 0.8, 1.6);
-        g.translate(0, 0.4, 0);
-        return g;
-      }),
-      this.material("stone"),
-    );
-    this.pedestal.position.set(pedX, this.pedestalY, pedZ);
-    this.collision.addBox({
-      x: pedX,
-      z: pedZ,
-      halfX: 0.8,
-      halfZ: 0.8,
-      minY: this.pedestalY,
-      maxY: this.pedestalY + 0.8,
-      tag: "pedestal",
-    });
-
-    this.probe = new Mesh(
-      assets.geometry("p2.probe", () => new DodecahedronGeometry(0.7, 0)),
-      this.material("ember"),
-    );
-    this.probe.position.set(pedX, this.pedestalY + 1.75, pedZ);
-    for (const mesh of [this.pedestal, this.probe]) {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-    }
-
     // --- Phase 3 Kelompok B: Player (Controller + Camera + CharacterModel + AnimFSM) ---
     this.player = new Player(
       assets,
@@ -176,7 +126,7 @@ export class FoundationScene {
       this.standard,
     );
 
-    this.root.add(this.pedestal, this.probe, this.player.model.root);
+    this.root.add(this.player.model.root);
     scene.add(this.root);
   }
 
@@ -196,8 +146,6 @@ export class FoundationScene {
     }
     if (preset.standardMaterials !== this.standard) {
       this.standard = preset.standardMaterials;
-      this.pedestal.material = this.material("stone");
-      this.probe.material = this.material("ember");
       this.player.setStandardMaterials(this.standard);
     }
     // Tie fog end distance to chunk view distance so streaming happens inside the fog (ARCHITECTURE.md §6.3)
@@ -210,8 +158,6 @@ export class FoundationScene {
 
   /** Fixed 60 Hz step driven by `InputManager`. */
   fixedUpdate(dt: number, stepInput: InputStepState = IDLE_STEP_INPUT): void {
-    this.probePrevAngle = this.probeAngle;
-    this.probeAngle += dt * 1.6;
     this.justDrankWater = false;
 
     const moveInput: PlayerMoveInput = {
@@ -233,10 +179,6 @@ export class FoundationScene {
 
   /** Per rendered frame: interpolation, third-person camera, chunk & environment streaming, water waves. */
   frameUpdate(frameDt: number, alpha: number, camera: PerspectiveCamera, menu: boolean): void {
-    const angle = lerp(this.probePrevAngle, this.probeAngle, alpha);
-    this.probe.rotation.set(angle * 0.5, angle, 0);
-    this.probe.position.y = this.pedestalY + 1.75 + Math.sin(angle * 0.8) * 0.15;
-
     if (menu) {
       this.player.frameUpdate(frameDt, alpha, camera, false);
       this.orbit += frameDt * 0.045;
@@ -288,25 +230,5 @@ export class FoundationScene {
     this.collision.clear();
     this.scene.remove(this.root);
     this.sun.shadow.map?.dispose();
-  }
-
-  private material(kind: MatKind): Material {
-    const tier = this.standard ? "std" : "lam";
-    const key = `p2.mat.${kind}.${tier}`;
-    return this.assets.material(key, () => {
-      const params = this.materialParams(kind);
-      return this.standard
-        ? new MeshStandardMaterial({ ...params, roughness: kind === "ember" ? 0.4 : 0.9, metalness: 0 })
-        : new MeshLambertMaterial(params);
-    });
-  }
-
-  private materialParams(kind: MatKind): { color: number; emissive?: number } {
-    switch (kind) {
-      case "stone":
-        return { color: 0x7d7a70 };
-      case "ember":
-        return { color: 0xe08a3c, emissive: 0x3a1a05 };
-    }
   }
 }

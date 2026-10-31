@@ -431,6 +431,12 @@ interface ColoredPart {
   readonly shadeTop?: number;
   /** Weight in [0, 1] for vertex-shader wind sway. */
   readonly swayWeight?: number;
+  /** Reference height in metres for normalizing wind sway (default 6.5 m). */
+  readonly swayRefHeight?: number;
+  /** Keep original geometry UVs intact (used for textured billboards). */
+  readonly keepUv?: boolean;
+  /** Apply natural rock facet & mossy top colour variation. */
+  readonly rockFacetTint?: boolean;
 }
 
 /**
@@ -479,6 +485,7 @@ function mergeColoredParts(parts: readonly ColoredPart[]): BufferGeometry {
     const bot = part.shadeBottom ?? 0.86;
     const top = part.shadeTop ?? 1.12;
     const sway = part.swayWeight ?? 0;
+    const swayRef = part.swayRefHeight ?? 6.5;
 
     for (let i = 0; i < count; i++) {
       const dst3 = (vOffset + i) * 3;
@@ -491,13 +498,27 @@ function mergeColoredParts(parts: readonly ColoredPart[]): BufferGeometry {
       positions[dst3 + 1] = py;
       positions[dst3 + 2] = pz;
 
-      // Tilt foliage normals slightly upward (+0.35 Y) so directional sun and
-      // hemisphere sky light illuminate the canopy warmly without harsh black undersides.
+      // Tilt foliage normals upward and outward so directional sun and
+      // hemisphere sky light illuminate canopies without any dark downward normals.
       let nx = norm ? norm.getX(i) : 0;
       let ny = norm ? norm.getY(i) : 1;
       let nz = norm ? norm.getZ(i) : 0;
       if (sway > 0.05) {
-        ny += 0.38;
+        ny = Math.max(0.38, ny + 0.38);
+        if (Math.hypot(nx, nz) < 1e-4) {
+          const rLen = Math.hypot(px, pz);
+          if (rLen > 1e-4) {
+            nx = (px / rLen) * 0.45;
+            nz = (pz / rLen) * 0.45;
+          } else {
+            ny = 1;
+          }
+        }
+        const nLen = Math.hypot(nx, ny, nz) || 1;
+        nx /= nLen;
+        ny /= nLen;
+        nz /= nLen;
+      } else {
         const nLen = Math.hypot(nx, ny, nz) || 1;
         nx /= nLen;
         ny /= nLen;
@@ -509,13 +530,31 @@ function mergeColoredParts(parts: readonly ColoredPart[]): BufferGeometry {
 
       const tY = clamp01((py - minY) / spanY);
       const grad = lerp(bot, top, tY);
-      colors[dst3] = clamp01(part.r * grad);
-      colors[dst3 + 1] = clamp01(part.g * grad);
-      colors[dst3 + 2] = clamp01(part.b * grad);
+      let cr = part.r * grad;
+      let cg = part.g * grad;
+      let cb = part.b * grad;
 
-      uvs[dst2] = uv ? uv.getX(i) : tY;
-      // Store wind sway weight in uv.y for vertex shader wind animation
-      uvs[dst2 + 1] = sway * clamp01(py / 6.5);
+      if (part.rockFacetTint) {
+        // Per-facet mineral variation + subtle lichen/moss warmth on upper faces
+        const facetVar = 1.0 + 0.09 * Math.sin(nx * 4.7 + nz * 5.3 + py * 2.1);
+        const mossBlend = smoothstep(0.52, 0.88, ny) * smoothstep(0.35, 0.85, tY) * 0.24;
+        cr = lerp(cr * facetVar, 0.44, mossBlend);
+        cg = lerp(cg * facetVar, 0.52, mossBlend);
+        cb = lerp(cb * facetVar, 0.34, mossBlend);
+      }
+
+      colors[dst3] = clamp01(cr);
+      colors[dst3 + 1] = clamp01(cg);
+      colors[dst3 + 2] = clamp01(cb);
+
+      if (part.keepUv && uv) {
+        uvs[dst2] = uv.getX(i);
+        uvs[dst2 + 1] = uv.getY(i);
+      } else {
+        uvs[dst2] = uv ? uv.getX(i) : tY;
+        // Store wind sway weight in uv.y for vertex shader wind animation
+        uvs[dst2 + 1] = sway * clamp01(py / swayRef);
+      }
     }
 
     const idx = g.getIndex();
@@ -544,8 +583,11 @@ function mergeColoredParts(parts: readonly ColoredPart[]): BufferGeometry {
 }
 
 /**
- * Builds procedural Pine tree geometry for LOD0 (trunk + 4 tiered cones),
- * LOD1 (low-poly trunk + 2 cones), or LOD2 (crossed billboard planes).
+ * Builds procedural Pine tree geometry for LOD0 (trunk + 4 tiered open-bottom cones),
+ * LOD1 (low-poly trunk + 2 open-bottom cones), or LOD2 (crossed billboard planes).
+ *
+ * Cones use `openEnded = true` so there is no flat downward-facing cap disk
+ * that would render as a dark horizontal line between canopy tiers.
  */
 export function buildPineTreeGeometry(lod: TreeLodTier): BufferGeometry {
   if (lod === 2) {
@@ -553,45 +595,45 @@ export function buildPineTreeGeometry(lod: TreeLodTier): BufferGeometry {
   }
 
   if (lod === 1) {
-    const trunk = new CylinderGeometry(0.12, 0.24, 2.1, 5, 1);
-    trunk.translate(0, 1.05, 0);
-    const cone1 = new ConeGeometry(1.55, 2.7, 6, 1);
-    cone1.translate(0, 2.85, 0);
-    const cone2 = new ConeGeometry(1.1, 2.5, 6, 1);
-    cone2.translate(0, 4.65, 0);
+    const trunk = new CylinderGeometry(0.12, 0.24, 2.2, 5, 1);
+    trunk.translate(0, 1.1, 0);
+    const cone1 = new ConeGeometry(1.58, 2.85, 6, 1, true);
+    cone1.translate(0, 2.8, 0);
+    const cone2 = new ConeGeometry(1.14, 2.65, 6, 1, true);
+    cone2.translate(0, 4.6, 0);
 
     return mergeColoredParts([
       { geo: trunk, r: 0.44, g: 0.31, b: 0.21, shadeBottom: 0.78, shadeTop: 1.0, swayWeight: 0.1 },
-      { geo: cone1, r: 0.24, g: 0.44, b: 0.23, shadeBottom: 0.84, shadeTop: 1.12, swayWeight: 0.7 },
-      { geo: cone2, r: 0.28, g: 0.5, b: 0.26, shadeBottom: 0.88, shadeTop: 1.16, swayWeight: 1.0 },
+      { geo: cone1, r: 0.25, g: 0.45, b: 0.24, shadeBottom: 0.92, shadeTop: 1.12, swayWeight: 0.7 },
+      { geo: cone2, r: 0.28, g: 0.5, b: 0.26, shadeBottom: 0.94, shadeTop: 1.16, swayWeight: 1.0 },
     ]);
   }
 
-  // LOD 0: Full 4-tier procedural pine (~160 tris)
-  const trunk = new CylinderGeometry(0.11, 0.26, 2.2, 6, 1);
-  trunk.translate(0, 1.1, 0);
+  // LOD 0: Full 4-tier procedural pine with open-ended overlapping cones (no dark bottom caps)
+  const trunk = new CylinderGeometry(0.11, 0.26, 2.3, 6, 1);
+  trunk.translate(0, 1.15, 0);
 
-  const tier1 = new ConeGeometry(1.68, 1.95, 7, 1);
-  tier1.translate(0, 2.45, 0);
+  const tier1 = new ConeGeometry(1.68, 2.1, 7, 1, true);
+  tier1.translate(0, 2.38, 0);
 
-  const tier2 = new ConeGeometry(1.42, 1.85, 7, 1);
+  const tier2 = new ConeGeometry(1.42, 2.0, 7, 1, true);
   tier2.rotateY(0.45);
-  tier2.translate(0, 3.55, 0);
+  tier2.translate(0, 3.48, 0);
 
-  const tier3 = new ConeGeometry(1.12, 1.7, 7, 1);
+  const tier3 = new ConeGeometry(1.12, 1.85, 7, 1, true);
   tier3.rotateY(0.9);
-  tier3.translate(0, 4.6, 0);
+  tier3.translate(0, 4.52, 0);
 
-  const tier4 = new ConeGeometry(0.76, 1.5, 6, 1);
+  const tier4 = new ConeGeometry(0.78, 1.62, 6, 1, true);
   tier4.rotateY(1.35);
-  tier4.translate(0, 5.6, 0);
+  tier4.translate(0, 5.52, 0);
 
   return mergeColoredParts([
     { geo: trunk, r: 0.45, g: 0.32, b: 0.22, shadeBottom: 0.75, shadeTop: 1.02, swayWeight: 0.08 },
-    { geo: tier1, r: 0.22, g: 0.41, b: 0.22, shadeBottom: 0.82, shadeTop: 1.08, swayWeight: 0.45 },
-    { geo: tier2, r: 0.25, g: 0.45, b: 0.24, shadeBottom: 0.85, shadeTop: 1.12, swayWeight: 0.65 },
-    { geo: tier3, r: 0.28, g: 0.49, b: 0.26, shadeBottom: 0.88, shadeTop: 1.15, swayWeight: 0.85 },
-    { geo: tier4, r: 0.31, g: 0.53, b: 0.28, shadeBottom: 0.92, shadeTop: 1.18, swayWeight: 1.0 },
+    { geo: tier1, r: 0.23, g: 0.43, b: 0.23, shadeBottom: 0.92, shadeTop: 1.08, swayWeight: 0.45 },
+    { geo: tier2, r: 0.26, g: 0.46, b: 0.25, shadeBottom: 0.93, shadeTop: 1.12, swayWeight: 0.65 },
+    { geo: tier3, r: 0.28, g: 0.5, b: 0.26, shadeBottom: 0.94, shadeTop: 1.15, swayWeight: 0.85 },
+    { geo: tier4, r: 0.31, g: 0.53, b: 0.28, shadeBottom: 0.95, shadeTop: 1.18, swayWeight: 1.0 },
   ]);
 }
 
@@ -666,34 +708,111 @@ function buildCrossedBillboardGeometry(width: number, height: number): BufferGeo
   p2.translate(0, height * 0.5, 0);
 
   return mergeColoredParts([
-    { geo: p1, r: 0.96, g: 0.98, b: 0.95, shadeBottom: 0.88, shadeTop: 1.08, swayWeight: 0.45 },
-    { geo: p2, r: 0.92, g: 0.95, b: 0.91, shadeBottom: 0.88, shadeTop: 1.08, swayWeight: 0.45 },
+    {
+      geo: p1,
+      r: 0.96,
+      g: 0.98,
+      b: 0.95,
+      shadeBottom: 0.92,
+      shadeTop: 1.06,
+      swayWeight: 0.35,
+      keepUv: true,
+    },
+    {
+      geo: p2,
+      r: 0.92,
+      g: 0.95,
+      b: 0.91,
+      shadeBottom: 0.92,
+      shadeTop: 1.06,
+      swayWeight: 0.35,
+      keepUv: true,
+    },
   ]);
 }
 
+function craggyDeformRock(geo: BufferGeometry, sx: number, sy: number, sz: number, phase: number): void {
+  const pos = geo.getAttribute("position") as BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const len = Math.hypot(x, y, z) || 1;
+    const dx = x / len;
+    const dy = y / len;
+    const dz = z / len;
+
+    // Deterministic angular facet displacement based on vertex direction
+    const facet =
+      1.0 +
+      0.14 * Math.sin(dx * 3.7 + dz * 2.9 + phase) +
+      0.1 * Math.cos(dy * 4.3 - dx * 2.5 + phase * 1.7);
+    // Flatten underside so rocks sit solidly on sloped terrain without floating
+    const baseFlat = dy < -0.25 ? 0.68 : 1.0;
+    const taperTop = dy > 0.35 ? 0.9 : 1.0;
+
+    pos.setXYZ(
+      i,
+      x * sx * facet * taperTop,
+      y * sy * facet * baseFlat,
+      z * sz * facet * taperTop,
+    );
+  }
+  // Recompute flat per-triangle normals so rock facets catch light crisply
+  geo.computeVertexNormals();
+}
+
 /**
- * Builds faceted procedural boulder / rock geometry (Task 4.4).
+ * Builds faceted procedural boulder / rock geometry with flat facet normals
+ * and mineral + moss vertex colour variation (Task 4.4).
  */
 export function buildRockGeometry(boulder: boolean, lod: PropLodTier): BufferGeometry {
   const detail = boulder && lod === 0 ? 1 : 0;
-  const g1 = new DodecahedronGeometry(boulder ? 1.0 : 0.52, detail);
-  g1.scale(1.12, boulder ? 0.78 : 0.68, 0.96);
-  g1.translate(0, boulder ? 0.58 : 0.28, 0);
+  const g1 = new DodecahedronGeometry(boulder ? 0.98 : 0.52, detail);
+  craggyDeformRock(g1, 1.14, boulder ? 0.78 : 0.68, 0.96, boulder ? 0.4 : 1.9);
+  g1.translate(0, boulder ? 0.54 : 0.26, 0);
 
   if (!boulder || lod === 1) {
     return mergeColoredParts([
-      { geo: g1, r: 0.5, g: 0.49, b: 0.45, shadeBottom: 0.72, shadeTop: 1.14, swayWeight: 0 },
+      {
+        geo: g1,
+        r: 0.56,
+        g: 0.54,
+        b: 0.49,
+        shadeBottom: 0.8,
+        shadeTop: 1.14,
+        swayWeight: 0,
+        rockFacetTint: true,
+      },
     ]);
   }
 
-  const g2 = new DodecahedronGeometry(0.62, 0);
-  g2.scale(1.05, 0.75, 0.9);
-  g2.rotateY(0.8);
-  g2.translate(0.55, 0.38, 0.22);
+  const g2 = new DodecahedronGeometry(0.6, 0);
+  craggyDeformRock(g2, 1.06, 0.74, 0.92, 2.7);
+  g2.rotateY(0.85);
+  g2.translate(0.54, 0.35, 0.22);
 
   return mergeColoredParts([
-    { geo: g1, r: 0.49, g: 0.48, b: 0.44, shadeBottom: 0.7, shadeTop: 1.14, swayWeight: 0 },
-    { geo: g2, r: 0.45, g: 0.46, b: 0.41, shadeBottom: 0.72, shadeTop: 1.1, swayWeight: 0 },
+    {
+      geo: g1,
+      r: 0.56,
+      g: 0.54,
+      b: 0.49,
+      shadeBottom: 0.8,
+      shadeTop: 1.14,
+      swayWeight: 0,
+      rockFacetTint: true,
+    },
+    {
+      geo: g2,
+      r: 0.52,
+      g: 0.51,
+      b: 0.46,
+      shadeBottom: 0.8,
+      shadeTop: 1.12,
+      swayWeight: 0,
+      rockFacetTint: true,
+    },
   ]);
 }
 
@@ -715,7 +834,7 @@ export function buildBushGeometry(withBerries: boolean): BufferGeometry {
       r: withBerries ? 0.24 : 0.36,
       g: withBerries ? 0.45 : 0.49,
       b: withBerries ? 0.22 : 0.24,
-      shadeBottom: 0.78,
+      shadeBottom: 0.84,
       shadeTop: 1.14,
       swayWeight: 0.65,
     },
@@ -724,7 +843,7 @@ export function buildBushGeometry(withBerries: boolean): BufferGeometry {
       r: withBerries ? 0.28 : 0.41,
       g: withBerries ? 0.49 : 0.53,
       b: withBerries ? 0.24 : 0.26,
-      shadeBottom: 0.8,
+      shadeBottom: 0.86,
       shadeTop: 1.16,
       swayWeight: 0.65,
     },
@@ -749,26 +868,121 @@ export function buildBushGeometry(withBerries: boolean): BufferGeometry {
 }
 
 /**
- * Builds a low-poly crossed grass clump (3 intersecting blades, 6 triangles)
- * with base-to-tip colour gradient and wind-sway UV weights (Task 4.4).
+ * Builds a natural tuft of 9 thin, pointed grass blades (9 triangles, 27 vertices)
+ * with varied blade heights (0.22–0.38 m before instance scale -> ~0.25–0.50 m in
+ * world space), varied olive/meadow/sunlit green hues, and root-to-tip wind sway
+ * weights (Task 4.4).
  */
 export function buildGrassClumpGeometry(): BufferGeometry {
-  const b1 = new PlaneGeometry(0.55, 0.62, 1, 1);
-  b1.translate(0, 0.31, 0);
+  const bladeSpecs: readonly {
+    ox: number;
+    oz: number;
+    yaw: number;
+    halfWidth: number;
+    height: number;
+    lean: number;
+    r: number;
+    g: number;
+    b: number;
+  }[] = [
+    { ox: 0.0, oz: 0.0, yaw: 0.15, halfWidth: 0.019, height: 0.37, lean: 0.05, r: 0.36, g: 0.54, b: 0.23 },
+    { ox: 0.06, oz: 0.03, yaw: 1.05, halfWidth: 0.018, height: 0.33, lean: 0.08, r: 0.41, g: 0.57, b: 0.25 },
+    { ox: -0.05, oz: 0.05, yaw: 2.15, halfWidth: 0.017, height: 0.29, lean: 0.09, r: 0.32, g: 0.49, b: 0.21 },
+    { ox: -0.06, oz: -0.04, yaw: 3.1, halfWidth: 0.019, height: 0.35, lean: 0.07, r: 0.38, g: 0.55, b: 0.24 },
+    { ox: 0.05, oz: -0.06, yaw: 4.2, halfWidth: 0.016, height: 0.26, lean: 0.08, r: 0.44, g: 0.59, b: 0.26 },
+    { ox: 0.11, oz: -0.01, yaw: 0.65, halfWidth: 0.016, height: 0.24, lean: 0.1, r: 0.34, g: 0.51, b: 0.22 },
+    { ox: -0.1, oz: 0.02, yaw: 2.65, halfWidth: 0.017, height: 0.27, lean: 0.1, r: 0.4, g: 0.56, b: 0.25 },
+    { ox: 0.02, oz: 0.1, yaw: 1.65, halfWidth: 0.018, height: 0.31, lean: 0.09, r: 0.35, g: 0.52, b: 0.23 },
+    { ox: -0.02, oz: -0.1, yaw: 4.85, halfWidth: 0.016, height: 0.23, lean: 0.09, r: 0.43, g: 0.58, b: 0.26 },
+  ];
 
-  const b2 = new PlaneGeometry(0.55, 0.58, 1, 1);
-  b2.rotateY(Math.PI / 3);
-  b2.translate(0, 0.29, 0);
+  const bladeCount = bladeSpecs.length;
+  const vertCount = bladeCount * 3;
+  const positions = new Float32Array(vertCount * 3);
+  const normals = new Float32Array(vertCount * 3);
+  const colors = new Float32Array(vertCount * 3);
+  const uvs = new Float32Array(vertCount * 2);
+  const indices = new Uint16Array(vertCount);
 
-  const b3 = new PlaneGeometry(0.52, 0.54, 1, 1);
-  b3.rotateY((2 * Math.PI) / 3);
-  b3.translate(0, 0.27, 0);
+  for (let i = 0; i < bladeCount; i++) {
+    const b = bladeSpecs[i]!;
+    const cos = Math.cos(b.yaw);
+    const sin = Math.sin(b.yaw);
+    // Blade width runs along (cos, sin), lean runs perpendicular (-sin, cos)
+    const wx = cos * b.halfWidth;
+    const wz = sin * b.halfWidth;
+    const lx = -sin * b.lean;
+    const lz = cos * b.lean;
 
-  return mergeColoredParts([
-    { geo: b1, r: 0.34, g: 0.49, b: 0.24, shadeBottom: 0.68, shadeTop: 1.22, swayWeight: 1.0 },
-    { geo: b2, r: 0.37, g: 0.52, b: 0.25, shadeBottom: 0.68, shadeTop: 1.22, swayWeight: 1.0 },
-    { geo: b3, r: 0.32, g: 0.47, b: 0.22, shadeBottom: 0.68, shadeTop: 1.22, swayWeight: 1.0 },
-  ]);
+    const v0 = i * 3;
+    const p0 = v0 * 3;
+    const p1 = (v0 + 1) * 3;
+    const p2 = (v0 + 2) * 3;
+
+    // Base left vertex (y = 0)
+    positions[p0] = b.ox - wx;
+    positions[p0 + 1] = 0;
+    positions[p0 + 2] = b.oz - wz;
+
+    // Base right vertex (y = 0)
+    positions[p1] = b.ox + wx;
+    positions[p1 + 1] = 0;
+    positions[p1 + 2] = b.oz + wz;
+
+    // Sharp pointed tip vertex (y = b.height)
+    positions[p2] = b.ox + lx;
+    positions[p2 + 1] = b.height;
+    positions[p2 + 2] = b.oz + lz;
+
+    // Upward-dominated normal so DoubleSide thin blades shade evenly from all angles
+    const nx = -sin * 0.22;
+    const ny = 0.95;
+    const nz = cos * 0.22;
+    const nLen = Math.hypot(nx, ny, nz) || 1;
+    for (let k = 0; k < 3; k++) {
+      const pk = (v0 + k) * 3;
+      normals[pk] = nx / nLen;
+      normals[pk + 1] = ny / nLen;
+      normals[pk + 2] = nz / nLen;
+    }
+
+    // Root vertices have deeper mossy shade; pointed tip has warm sunlit green-gold lift
+    const baseShade = 0.72;
+    const tipShade = 1.22;
+    colors[p0] = clamp01(b.r * baseShade);
+    colors[p0 + 1] = clamp01(b.g * baseShade);
+    colors[p0 + 2] = clamp01(b.b * baseShade);
+
+    colors[p1] = clamp01(b.r * baseShade);
+    colors[p1 + 1] = clamp01(b.g * baseShade);
+    colors[p1 + 2] = clamp01(b.b * baseShade);
+
+    colors[p2] = clamp01(b.r * tipShade + 0.04);
+    colors[p2 + 1] = clamp01(b.g * tipShade + 0.03);
+    colors[p2 + 2] = clamp01(b.b * tipShade);
+
+    // uv.y = 0 at root (anchored), uv.y = normalized height at tip (gentle wind sway)
+    const tipSway = clamp01(b.height / 0.38);
+    uvs[v0 * 2] = 0;
+    uvs[v0 * 2 + 1] = 0;
+    uvs[(v0 + 1) * 2] = 1;
+    uvs[(v0 + 1) * 2 + 1] = 0;
+    uvs[(v0 + 2) * 2] = 0.5;
+    uvs[(v0 + 2) * 2 + 1] = tipSway;
+
+    indices[v0] = v0;
+    indices[v0 + 1] = v0 + 1;
+    indices[v0 + 2] = v0 + 2;
+  }
+
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(positions, 3));
+  geo.setAttribute("normal", new BufferAttribute(normals, 3));
+  geo.setAttribute("color", new BufferAttribute(colors, 3));
+  geo.setAttribute("uv", new BufferAttribute(uvs, 2));
+  geo.setIndex(new BufferAttribute(indices, 1));
+  geo.computeBoundingSphere();
+  return geo;
 }
 
 // --- Far-Impostor Texture Baking (Task 4.1) --------------------------------
@@ -1263,7 +1477,8 @@ export class Environment {
     mesh.boundingBox = group.boundingBox.clone();
     mesh.boundingSphere = group.boundingSphere.clone();
     mesh.frustumCulled = true;
-    mesh.receiveShadow = true;
+    // Rocks receive shadows; foliage avoids low-res shadow-map self-shadow bands across cone tiers
+    mesh.receiveShadow = batch.kind === "boulder" || batch.kind === "rock";
 
     batch.mesh = mesh;
     batch.lod = lod;
@@ -1383,12 +1598,15 @@ export class Environment {
           continue;
         }
 
-        const s = (0.75 + (((h >>> 24) & 0xff) / 255) * 0.55) * (0.65 + 0.35 * distProb);
+        // Independent XZ width and Y height scale so tufts vary between ~0.25 m and ~0.50 m tall
+        const distScale = 0.72 + 0.28 * distProb;
+        const scaleXZ = (0.78 + (((h >>> 20) & 0x0f) / 15) * 0.38) * distScale;
+        const scaleY = (0.72 + (((h >>> 24) & 0xff) / 255) * 0.62) * distScale;
         const yaw = ((h & 0xffff) / 65535) * TAU;
 
-        this.scratchPos.set(wx, sample.height - 0.03, wz);
+        this.scratchPos.set(wx, sample.height - 0.015, wz);
         this.scratchQuat.setFromAxisAngle(this.upAxis, yaw);
-        this.scratchScale.set(s, s, s);
+        this.scratchScale.set(scaleXZ, scaleY, scaleXZ);
         this.scratchMat.compose(this.scratchPos, this.scratchQuat, this.scratchScale);
         this.grassMesh.setMatrixAt(count++, this.scratchMat);
       }
@@ -1453,7 +1671,7 @@ export class Environment {
               side: DoubleSide,
               emissive: new Color(0x0c170b),
             });
-        this.attachWindShader(mat, 0.35);
+        this.attachWindShader(mat, 0.25, "impostor");
         return mat;
       });
     }
@@ -1464,12 +1682,12 @@ export class Environment {
     return this.assets.material(`p4.mat.${matCategory}.${tier}`, () => {
       // Foliage gets a subtle warm-green ambient emissive lift so pine/bush
       // crowns never crush to pitch black on mobile Lambert/Standard shading.
-      const emissiveHex = isRock ? 0x050504 : 0x0e190c;
+      const emissiveHex = isRock ? 0x070706 : 0x0e190c;
       const mat = this.standardMaterials
         ? new MeshStandardMaterial({
             color: 0xffffff,
             vertexColors: true,
-            roughness: isRock ? 0.9 : 0.84,
+            roughness: isRock ? 0.88 : 0.84,
             metalness: 0.0,
             emissive: new Color(emissiveHex),
           })
@@ -1480,7 +1698,7 @@ export class Environment {
           });
 
       if (!isRock) {
-        this.attachWindShader(mat, 0.22);
+        this.attachWindShader(mat, 0.22, "foliage");
       }
       return mat;
     });
@@ -1504,41 +1722,75 @@ export class Environment {
             side: DoubleSide,
             emissive: new Color(0x0d170a),
           });
-      this.attachWindShader(mat, 0.26);
+      this.attachWindShader(mat, 0.16, "grass");
       return mat;
     });
   }
 
-  private attachWindShader(mat: Material, amplitude: number): void {
+  private attachWindShader(
+    mat: Material,
+    amplitude: number,
+    mode: "foliage" | "grass" | "impostor" = "foliage",
+  ): void {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms["uTime"] = this.windUniforms.uTime;
       shader.uniforms["uWindStrength"] = this.windUniforms.uWindStrength;
       shader.uniforms["uWindDir"] = this.windUniforms.uWindDir;
 
-      shader.vertexShader =
+      const swayExpr =
+        mode === "impostor"
+          ? "clamp(transformed.y * 0.15, 0.0, 1.0) * 0.35"
+          : mode === "grass"
+            ? "uv.y * uv.y"
+            : "uv.y";
+      const speed = mode === "grass" ? "1.65" : "2.1";
+
+      let vs =
         /* glsl */ `
         uniform float uTime;
         uniform float uWindStrength;
         uniform vec3 uWindDir;
-        ` +
-        shader.vertexShader.replace(
-          "#include <begin_vertex>",
+        ` + shader.vertexShader;
+
+      if (mode === "grass") {
+        // Subtle world-space patch colour variation across grass tufts
+        vs = vs.replace(
+          "#include <color_vertex>",
           /* glsl */ `
-          #include <begin_vertex>
-          float swayMask = uv.y;
-          if (swayMask > 0.001) {
-            vec3 instPos = vec3(0.0);
+          #include <color_vertex>
+          #if defined( USE_COLOR_ALPHA ) || defined( USE_COLOR )
             #ifdef USE_INSTANCING
-              instPos = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+              float patchVar = sin(instanceMatrix[3][0] * 0.37 + instanceMatrix[3][2] * 0.43)
+                             + 0.5 * cos(instanceMatrix[3][0] * 0.13 - instanceMatrix[3][2] * 0.19);
+              vColor.rgb = clamp(
+                vColor.rgb * vec3(1.0 + 0.09 * patchVar, 1.0 + 0.06 * patchVar, 1.0 - 0.05 * patchVar),
+                0.0,
+                1.0
+              );
             #endif
-            float phase = (instPos.x + transformed.x) * 0.23 + (instPos.z + transformed.z) * 0.19 + uTime * 2.1;
-            float gust = sin(phase) + 0.45 * cos(phase * 1.7);
-            float disp = gust * swayMask * uWindStrength * ${amplitude.toFixed(3)};
-            transformed.x += uWindDir.x * disp;
-            transformed.z += uWindDir.z * disp;
-          }
+          #endif
           `,
         );
+      }
+
+      shader.vertexShader = vs.replace(
+        "#include <begin_vertex>",
+        /* glsl */ `
+        #include <begin_vertex>
+        float swayMask = ${swayExpr};
+        if (swayMask > 0.001) {
+          vec3 instPos = vec3(0.0);
+          #ifdef USE_INSTANCING
+            instPos = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+          #endif
+          float phase = (instPos.x + transformed.x) * 0.25 + (instPos.z + transformed.z) * 0.21 + uTime * ${speed};
+          float gust = sin(phase) + 0.4 * cos(phase * 1.6);
+          float disp = gust * swayMask * uWindStrength * ${amplitude.toFixed(3)};
+          transformed.x += uWindDir.x * disp;
+          transformed.z += uWindDir.z * disp;
+        }
+        `,
+      );
     };
   }
 }
