@@ -1,11 +1,12 @@
 /**
- * Phase 2 screens: a minimal main menu, loading veil, pause button, and pause
- * panel with live graphics controls. Every button is wired to a real action.
+ * Phase 2/3 screens: a minimal main menu, loading veil, pause button, pause
+ * panel with live graphics controls, and a clearly marked temporary debug strip
+ * for Phase 3 Kelompok B (Tasks 3.7–3.9) before Kelompok C (3.10–3.12) arrives.
  *
- * Phase 6 replaces these with the full MainMenu / PauseMenu / SettingsUI.
- * Settings / Credits are intentionally absent here (no dead controls).
+ * Every button is wired to a real action.
  */
 
+import type { TempDebugLocomotionMode } from "../core/FoundationScene.ts";
 import type { FpsCap } from "../core/GameLoop.ts";
 import type { GameStateName } from "../core/GameState.ts";
 import { PRESET_LABELS, PRESET_NAMES, type PresetName } from "../core/GraphicsSettings.ts";
@@ -19,6 +20,12 @@ export interface ScreenHandlers {
   onPreset(preset: PresetName): void;
   onFpsCap(cap: FpsCap): void;
   onAdaptive(enabled: boolean): void;
+  // TEMP DEBUG (Phase 3 Kelompok B only — replaced by 3.10/3.11 in Kelompok C)
+  onTempDebugMode(mode: TempDebugLocomotionMode): void;
+  onTempDebugJump(): void;
+  onTempDebugGather(): void;
+  onTempDebugDrink(): void;
+  onTempDebugReset(): void;
 }
 
 export interface GraphicsViewState {
@@ -34,6 +41,14 @@ const CAP_OPTIONS: readonly { value: FpsCap; label: string }[] = [
   { value: 0, label: "Uncapped" },
 ];
 
+const DEBUG_MODES: readonly { mode: TempDebugLocomotionMode; label: string }[] = [
+  { mode: "idle", label: "Idle" },
+  { mode: "walk", label: "Walk" },
+  { mode: "run", label: "Run" },
+  { mode: "sprint", label: "Sprint" },
+  { mode: "crouch", label: "Crouch" },
+];
+
 const PAUSE_ICON =
   '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8.5 5.5v13M15.5 5.5v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>';
 
@@ -42,9 +57,11 @@ export class FoundationScreens {
   private readonly loading: HTMLElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly pausePanel: HTMLElement;
+  private readonly tempDebugBar: HTMLElement;
   private readonly detectedLabel: HTMLElement;
   private readonly presetButtons = new Map<PresetName, HTMLButtonElement>();
   private readonly capButtons = new Map<FpsCap, HTMLButtonElement>();
+  private readonly debugModeButtons = new Map<TempDebugLocomotionMode, HTMLButtonElement>();
   private readonly adaptiveSwitch: HTMLButtonElement;
   private readonly startButton: HTMLButtonElement;
   private readonly resumeButton: HTMLButtonElement;
@@ -56,7 +73,7 @@ export class FoundationScreens {
     this.menu = el("section", { class: "screen screen-menu", "aria-label": "Main menu", hidden: true }, [
       el("div", { class: "menu-inner" }, [
         el("h1", { class: "wordmark", text: "Wild Frontier" }),
-        el("p", { class: "menu-sub", text: "Foundation build · Phase 2 verification scene" }),
+        el("p", { class: "menu-sub", text: "Phase 3 Kelompok B · World, Player, Camera & Rig" }),
         el("div", { class: "menu-actions" }, [this.startButton]),
         this.detectedLabel,
       ]),
@@ -72,6 +89,62 @@ export class FoundationScreens {
     this.pauseButton = el("button", { class: "icon-btn hud-pause", type: "button", "aria-label": "Pause", hidden: true });
     this.pauseButton.innerHTML = PAUSE_ICON;
     onClick(this.pauseButton, () => handlers.onPause());
+
+    // --- TEMP DEBUG strip (Phase 3 Kelompok B only — removed in Kelompok C) ---
+    const modeRow = el("div", { class: "temp-debug-row" });
+    for (const item of DEBUG_MODES) {
+      const b = el("button", {
+        class: "temp-debug-btn",
+        type: "button",
+        text: item.label,
+        "aria-pressed": String(item.mode === "idle"),
+      });
+      onClick(b, () => {
+        this.setTempDebugMode(item.mode);
+        handlers.onTempDebugMode(item.mode);
+      });
+      this.debugModeButtons.set(item.mode, b);
+      modeRow.append(b);
+    }
+
+    const jumpBtn = el("button", { class: "temp-debug-btn", type: "button", text: "Jump" });
+    const gatherBtn = el("button", { class: "temp-debug-btn", type: "button", text: "Gather" });
+    const drinkBtn = el("button", { class: "temp-debug-btn", type: "button", text: "Drink" });
+    const resetBtn = el("button", { class: "temp-debug-btn", type: "button", text: "Spawn" });
+
+    onClick(jumpBtn, () => handlers.onTempDebugJump());
+    onClick(gatherBtn, () => {
+      this.setTempDebugMode("idle");
+      handlers.onTempDebugMode("idle");
+      handlers.onTempDebugGather();
+    });
+    onClick(drinkBtn, () => {
+      this.setTempDebugMode("idle");
+      handlers.onTempDebugMode("idle");
+      handlers.onTempDebugDrink();
+    });
+    onClick(resetBtn, () => {
+      this.setTempDebugMode("idle");
+      handlers.onTempDebugReset();
+    });
+
+    modeRow.append(jumpBtn, gatherBtn, drinkBtn, resetBtn);
+
+    this.tempDebugBar = el(
+      "aside",
+      {
+        class: "temp-debug-bar",
+        "aria-label": "Temporary debug controls for Phase 3 Group B",
+        hidden: true,
+      },
+      [
+        el("div", {
+          class: "temp-debug-tag",
+          text: "TEMP DEBUG (3.7–3.9 only · drag screen to orbit camera · not 3.10–3.12)",
+        }),
+        modeRow,
+      ],
+    );
 
     // --- Pause panel ---
     this.resumeButton = el("button", { class: "btn btn-primary", type: "button", text: "Resume" });
@@ -114,16 +187,23 @@ export class FoundationScreens {
       ]),
     ]);
 
-    parent.append(this.menu, this.loading, this.pauseButton, this.pausePanel);
+    parent.append(this.menu, this.loading, this.pauseButton, this.tempDebugBar, this.pausePanel);
   }
 
   showState(state: GameStateName): void {
     setVisible(this.menu, state === "mainMenu");
     setVisible(this.loading, state === "loading");
     setVisible(this.pauseButton, state === "playing");
+    setVisible(this.tempDebugBar, state === "playing");
     setVisible(this.pausePanel, state === "paused");
     if (state === "mainMenu") this.startButton.focus({ preventScroll: true });
     if (state === "paused") this.resumeButton.focus({ preventScroll: true });
+  }
+
+  setTempDebugMode(mode: TempDebugLocomotionMode): void {
+    for (const [m, b] of this.debugModeButtons) {
+      b.setAttribute("aria-pressed", String(m === mode));
+    }
   }
 
   setGraphics(view: GraphicsViewState): void {

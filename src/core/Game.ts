@@ -97,6 +97,12 @@ export class Game {
       onPreset: (p) => this.setPreset(p),
       onFpsCap: (c) => this.setFpsCap(c),
       onAdaptive: (on) => this.setAdaptive(on),
+      // TEMP DEBUG (Phase 3 Kelompok B only — replaced by 3.10/3.11 in Kelompok C)
+      onTempDebugMode: (mode) => this.world.setTempDebugMode(mode),
+      onTempDebugJump: () => this.world.triggerTempDebugJump(),
+      onTempDebugGather: () => this.world.triggerTempDebugGather(),
+      onTempDebugDrink: () => this.world.triggerTempDebugDrink(),
+      onTempDebugReset: () => this.world.resetPlayerToSpawn(),
     });
     this.diagnostics = new DiagnosticsUI(ui, options.diagnosticsExpanded);
 
@@ -137,6 +143,7 @@ export class Game {
 
     this.applyPreset(this.preset, this.preset.defaultFpsCap);
     this.bindGlobalInput();
+    this.bindTempDebugCameraDrag(viewport);
   }
 
   start(): void {
@@ -304,5 +311,40 @@ export class Game {
         this.lastStatsVersion = -1;
       }
     });
+  }
+
+  /**
+   * TEMP DEBUG INPUT (Phase 3 Kelompok B only — NOT a replacement for Tasks 3.10–3.12):
+   * Lets the user drag on the viewport in `playing` state to orbit `CameraController`
+   * around `Player` so Tasks 3.7–3.9 can be verified before Kelompok C.
+   */
+  private bindTempDebugCameraDrag(viewport: HTMLElement): void {
+    let activePointerId: number | null = null;
+    let lastX = 0;
+    let lastY = 0;
+
+    viewport.addEventListener("pointerdown", (e) => {
+      if (this.states.state !== "playing" || activePointerId !== null) return;
+      activePointerId = e.pointerId;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+
+    viewport.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== activePointerId || this.states.state !== "playing") return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      this.world.player.camera.applyLook(-dx * 0.007, dy * 0.006);
+    });
+
+    const release = (e: PointerEvent) => {
+      if (e.pointerId === activePointerId) {
+        activePointerId = null;
+      }
+    };
+    viewport.addEventListener("pointerup", release);
+    viewport.addEventListener("pointercancel", release);
   }
 }

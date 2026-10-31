@@ -47,16 +47,20 @@ User decisions (2026-10-31), recorded in ARCHITECTURE.md:
 |---|---|---|---|
 | 3.1 | `Noise` (seeded simplex, fBm, ridged) | U determinism | [x] (U pass) |
 | 3.2 | `Heightfield` + `WorldGenerator` macro layout (mountains, valley, lake basin, river splines + carving, boundary ring, POI placement) | U same seed gives identical output | [x] (U pass) |
-| 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M | [~] (U+T+B pass; awaiting M on device) |
-| 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M | [~] (U+T+B pass; awaiting M+D on device) |
-| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; awaiting M on device) |
+| 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M | [x] (U+T+B+M pass on Mali-G57 MC2 Ultra: 441 active chunks, no seam gaps; Medium/Low presets on this scene not yet manually tested) |
+| 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M | [x] (U+T+B+M+D pass on Mali-G57 MC2 Ultra: 60 FPS, 16.6 ms, 441 chunks, q=0, upload 0.00 ms, 68 calls, ~50k tris, no errors; Medium/Low presets on this scene not yet manually tested) |
+| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; M pass for lake & shoreline on Mali-G57 MC2 Ultra; rivers, waterfall, and Medium/Low presets not yet manually tested) |
 | 3.6 | `Collision`: spatial hash (circles, boxes), push-out resolution | U | [x] (U pass) |
-| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [ ] |
-| 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips | [ ] |
-| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [ ] |
+| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [~] (U+T+B pass; awaiting M on device) |
+| 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips | [~] (U+T+B pass; awaiting M on device) |
+| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [~] (U+T+B pass; awaiting M on device) |
 | 3.10 | `KeyboardMouseInput` (WASD, Space, Shift, E, I, C, Esc, pointer lock) | M (desktop; may be untested, see R2) | [ ] |
 | 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [ ] |
 | 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [ ] |
+
+**Recorded polish notes from Phase 3 Group A device test (deferred — do not work on now):**
+- [ ] **Phase 4 lighting/vegetation polish:** Trees appear too dark under current lighting (address in Phase 4 with `Environment` tree shading and `DayNightCycle` hemisphere/sun lighting).
+- [ ] **Water polish:** Distant water surface exhibits a subtle grid/box pattern (address during shader/visual polish).
 
 ## Phase 4 — Environment
 

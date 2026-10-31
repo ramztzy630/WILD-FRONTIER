@@ -394,6 +394,59 @@ body {
   right: calc(var(--s-3) + var(--safe-r));
 }
 
+/* TEMP DEBUG bar (Phase 3 Kelompok B only — removed in Kelompok C) */
+.temp-debug-bar {
+  position: absolute;
+  z-index: var(--z-hud);
+  left: 50%;
+  bottom: calc(var(--s-2) + var(--safe-b));
+  transform: translateX(-50%);
+  max-width: calc(100vw - var(--s-4));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-2);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--c-ember);
+  background: rgba(13, 15, 12, 0.84);
+}
+
+.temp-debug-tag {
+  font: 600 10px / 1.2 var(--f-mono);
+  color: var(--c-gold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.temp-debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-1);
+}
+
+.temp-debug-btn {
+  appearance: none;
+  min-height: 44px;
+  min-width: 52px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--c-line-strong);
+  background: var(--c-ink-700);
+  color: var(--c-text);
+  font: 600 11px / 1 var(--f-mono);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.temp-debug-btn[aria-pressed="true"] {
+  background: var(--c-ember);
+  border-color: var(--c-ember);
+  color: var(--c-ink-900);
+}
+
 /* ---------- Form controls (DESIGN-SYSTEM.md §7.8) ---------- */
 
 .field {

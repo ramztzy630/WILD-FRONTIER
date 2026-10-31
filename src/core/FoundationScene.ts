@@ -1,10 +1,11 @@
 /**
- * World scene (Phase 3 Kelompok A: procedural terrain, chunk streaming,
- * lake/rivers/waterfall water system, and spatial-hash collision).
+ * World scene (Phase 3 Kelompok A + B: procedural terrain, chunk streaming,
+ * lake/rivers/waterfall water system, spatial-hash collision, and third-person
+ * Player + CameraController + procedural CharacterModel + AnimationController).
  *
- * Keeps the rotating fixed-step probe at the spawn clearing so fixed-step
- * interpolation remains visually verifiable alongside the procedural terrain
- * and water until the player controller arrives in Kelompok B.
+ * Includes a clearly marked temporary debug locomotion hook for Kelompok B
+ * verification prior to Kelompok C (Tasks 3.10–3.12: KeyboardMouseInput &
+ * TouchInput).
  */
 
 import {
@@ -32,6 +33,8 @@ import type { AssetManager } from "./AssetManager.ts";
 import { getPreset, type GraphicsPreset } from "./GraphicsSettings.ts";
 import { Random } from "./Random.ts";
 import { TAU, lerp } from "./math.ts";
+import { Player } from "../player/Player.ts";
+import type { PlayerMoveInput } from "../player/PlayerController.ts";
 import { CollisionWorld } from "../world/Collision.ts";
 import { Heightfield } from "../world/Heightfield.ts";
 import { Terrain, type TerrainStats } from "../world/Terrain.ts";
@@ -43,12 +46,20 @@ const SKY = 0xa9b9b4;
 
 type MatKind = "foliage" | "bark" | "stone";
 
+/**
+ * TEMP DEBUG (Phase 3 Kelompok B only — not a replacement for 3.10–3.12):
+ * Allows verifying PlayerController & AnimationController states before
+ * KeyboardMouseInput and TouchInput are added in Kelompok C.
+ */
+export type TempDebugLocomotionMode = "idle" | "walk" | "run" | "sprint" | "crouch";
+
 export class FoundationScene {
   readonly generator: WorldGenerator;
   readonly heightfield: Heightfield;
   readonly collision = new CollisionWorld(8);
   readonly terrain: Terrain;
   readonly water: Water;
+  readonly player: Player;
 
   private readonly scene: Scene;
   private readonly assets: AssetManager;
@@ -64,12 +75,17 @@ export class FoundationScene {
   private readonly spawnX: number;
   private readonly spawnY: number;
   private readonly spawnZ: number;
+  private readonly pedestalY: number;
 
   // Fixed-step state of the probe (previous + current for interpolation).
   private probeAngle = 0;
   private probePrevAngle = 0;
   private orbit = 0;
   private readonly lookTarget = new Vector3();
+
+  // --- TEMP DEBUG state (Phase 3 Kelompok B only; removed in Kelompok C) ---
+  private debugMode: TempDebugLocomotionMode = "idle";
+  private debugJumpPending = false;
 
   constructor(scene: Scene, assets: AssetManager, seed: number) {
     this.scene = scene;
@@ -161,6 +177,10 @@ export class FoundationScene {
     this.foliage.computeBoundingSphere();
     this.trunks.computeBoundingSphere();
 
+    // Place verification pedestal slightly ahead of the player spawn clearing
+    const pedX = this.spawnX + 3.0;
+    const pedZ = this.spawnZ + 3.5;
+    this.pedestalY = this.heightfield.height(pedX, pedZ);
     this.pedestal = new Mesh(
       assets.geometry("p2.pedestal", () => {
         const g = new BoxGeometry(1.6, 0.8, 1.6);
@@ -169,14 +189,14 @@ export class FoundationScene {
       }),
       this.material("stone"),
     );
-    this.pedestal.position.set(this.spawnX, this.spawnY, this.spawnZ);
+    this.pedestal.position.set(pedX, this.pedestalY, pedZ);
     this.collision.addBox({
-      x: this.spawnX,
-      z: this.spawnZ,
+      x: pedX,
+      z: pedZ,
       halfX: 0.8,
       halfZ: 0.8,
-      minY: this.spawnY,
-      maxY: this.spawnY + 0.8,
+      minY: this.pedestalY,
+      maxY: this.pedestalY + 0.8,
       tag: "pedestal",
     });
 
@@ -184,15 +204,56 @@ export class FoundationScene {
       assets.geometry("p2.probe", () => new DodecahedronGeometry(0.7, 0)),
       this.material("ember"),
     );
-    this.probe.position.set(this.spawnX, this.spawnY + 1.75, this.spawnZ);
+    this.probe.position.set(pedX, this.pedestalY + 1.75, pedZ);
     for (const mesh of [this.pedestal, this.probe]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
     }
 
-    this.root.add(this.foliage, this.trunks, this.pedestal, this.probe);
+    // --- Phase 3 Kelompok B: Player (Controller + Camera + CharacterModel + AnimFSM) ---
+    this.player = new Player(
+      assets,
+      this.heightfield,
+      this.collision,
+      this.spawnX,
+      this.spawnZ,
+      this.standard,
+    );
+
+    this.root.add(this.foliage, this.trunks, this.pedestal, this.probe, this.player.model.root);
     scene.add(this.root);
   }
+
+  // --- TEMP DEBUG hooks (Phase 3 Kelompok B only) --------------------------
+
+  setTempDebugMode(mode: TempDebugLocomotionMode): void {
+    this.debugMode = mode;
+  }
+
+  getTempDebugMode(): TempDebugLocomotionMode {
+    return this.debugMode;
+  }
+
+  triggerTempDebugJump(): void {
+    this.debugJumpPending = true;
+  }
+
+  triggerTempDebugGather(): void {
+    this.player.anim.triggerGather("chop");
+  }
+
+  triggerTempDebugDrink(): void {
+    this.player.anim.triggerDrink();
+  }
+
+  resetPlayerToSpawn(): void {
+    this.debugMode = "idle";
+    this.debugJumpPending = false;
+    this.player.controller.setPosition(this.spawnX, this.spawnZ, 0);
+    this.player.camera.snapToTarget(this.spawnX, this.spawnY, this.spawnZ, false);
+  }
+
+  // -------------------------------------------------------------------------
 
   /** Applies the scene-level part of a graphics preset (shadows, material tier, view distance). */
   applyPreset(preset: GraphicsPreset): void {
@@ -209,6 +270,7 @@ export class FoundationScene {
       this.trunks.material = this.material("bark");
       this.pedestal.material = this.material("stone");
       this.probe.material = this.material("ember");
+      this.player.setStandardMaterials(this.standard);
     }
     // Tie fog end distance to chunk view distance so streaming happens inside the fog (ARCHITECTURE.md §6.3)
     const viewMetres = preset.viewDistanceChunks * CHUNK_SIZE;
@@ -221,28 +283,69 @@ export class FoundationScene {
   fixedUpdate(dt: number): void {
     this.probePrevAngle = this.probeAngle;
     this.probeAngle += dt * 1.6;
+
+    const jumpPressed = this.debugJumpPending;
+    this.debugJumpPending = false;
+
+    const moveZ =
+      this.debugMode === "idle"
+        ? 0
+        : this.debugMode === "walk"
+          ? 0.5
+          : 1.0;
+
+    const input: PlayerMoveInput = {
+      moveX: 0,
+      moveZ,
+      cameraYaw: this.player.camera.yaw,
+      sprint: this.debugMode === "sprint",
+      crouch: this.debugMode === "crouch",
+      jumpPressed,
+    };
+
+    this.player.fixedUpdate(dt, input);
   }
 
-  /** Per rendered frame: interpolation, chunk streaming, water waves, and scenic camera. */
+  /** Per rendered frame: interpolation, third-person camera, chunk streaming, water waves. */
   frameUpdate(frameDt: number, alpha: number, camera: PerspectiveCamera, menu: boolean): void {
     const angle = lerp(this.probePrevAngle, this.probeAngle, alpha);
     this.probe.rotation.set(angle * 0.5, angle, 0);
-    this.probe.position.y = this.spawnY + 1.75 + Math.sin(angle * 0.8) * 0.15;
+    this.probe.position.y = this.pedestalY + 1.75 + Math.sin(angle * 0.8) * 0.15;
 
-    this.orbit += frameDt * (menu ? 0.045 : 0.11);
-    const radius = menu ? 38 : 22;
-    const camX = this.spawnX + Math.cos(this.orbit) * radius;
-    const camZ = this.spawnZ + Math.sin(this.orbit) * radius;
-    const groundAtCam = this.heightfield.height(camX, camZ);
-    const waterAtCam = this.heightfield.waterInfo(camX, camZ);
-    const baseSurface = waterAtCam.hasWater ? Math.max(groundAtCam, waterAtCam.surfaceY) : groundAtCam;
-    const camY = Math.max(baseSurface + (menu ? 11.0 : 5.5), this.spawnY + (menu ? 9.0 : 4.5));
+    if (menu) {
+      this.player.frameUpdate(frameDt, alpha, camera, false);
+      this.orbit += frameDt * 0.045;
+      const radius = 38;
+      const camX = this.spawnX + Math.cos(this.orbit) * radius;
+      const camZ = this.spawnZ + Math.sin(this.orbit) * radius;
+      const groundAtCam = this.heightfield.height(camX, camZ);
+      const waterAtCam = this.heightfield.waterInfo(camX, camZ);
+      const baseSurface = waterAtCam.hasWater
+        ? Math.max(groundAtCam, waterAtCam.surfaceY)
+        : groundAtCam;
+      const camY = Math.max(baseSurface + 11.0, this.spawnY + 9.0);
 
-    camera.position.set(camX, camY, camZ);
-    this.lookTarget.set(this.spawnX, this.spawnY + 1.6, this.spawnZ);
-    camera.lookAt(this.lookTarget);
+      camera.position.set(camX, camY, camZ);
+      this.lookTarget.set(this.spawnX, this.spawnY + 1.6, this.spawnZ);
+      camera.lookAt(this.lookTarget);
 
-    this.terrain.update(camX, camZ);
+      this.terrain.update(camX, camZ);
+    } else {
+      this.player.frameUpdate(frameDt, alpha, camera, true);
+      const px = this.player.controller.x;
+      const py = this.player.controller.y;
+      const pz = this.player.controller.z;
+
+      // Follow player with directional shadow frustum (snapped to 0.5 m grid)
+      const snapX = Math.round(px * 2) * 0.5;
+      const snapZ = Math.round(pz * 2) * 0.5;
+      this.sun.position.set(snapX + 35, py + 46, snapZ + 22);
+      this.sun.target.position.set(snapX, py, snapZ);
+      this.sun.target.updateMatrixWorld();
+
+      this.terrain.update(px, pz);
+    }
+
     this.water.update(frameDt, this.fog.near, this.fog.far, SKY);
   }
 
@@ -251,6 +354,7 @@ export class FoundationScene {
   }
 
   dispose(): void {
+    this.player.dispose();
     this.terrain.dispose();
     this.water.dispose();
     this.collision.clear();
