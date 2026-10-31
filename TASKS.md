@@ -47,16 +47,16 @@ User decisions (2026-10-31), recorded in ARCHITECTURE.md:
 |---|---|---|---|
 | 3.1 | `Noise` (seeded simplex, fBm, ridged) | U determinism | [x] (U pass) |
 | 3.2 | `Heightfield` + `WorldGenerator` macro layout (mountains, valley, lake basin, river splines + carving, boundary ring, POI placement) | U same seed gives identical output | [x] (U pass) |
-| 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M | [x] (U+T+B+M pass on Mali-G57 MC2 Ultra: 441 active chunks, no seam gaps; Medium/Low presets on this scene not yet manually tested) |
-| 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M | [x] (U+T+B+M+D pass on Mali-G57 MC2 Ultra: 60 FPS, 16.6 ms, 441 chunks, q=0, upload 0.00 ms, 68 calls, ~50k tris, no errors; Medium/Low presets on this scene not yet manually tested) |
-| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; M pass for lake & shoreline on Mali-G57 MC2 Ultra; rivers, waterfall, and Medium/Low presets not yet manually tested) |
+| 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M | [x] (U+T+B+M pass on Mali-G57 MC2 Ultra [441 chunks] & Medium [169 chunks], no seam gaps; Low preset not yet manually tested) |
+| 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M | [x] (U+T+B+M+D pass on Mali-G57 MC2: Ultra 60 FPS [441 chunks, 68 calls, ~50k tris] & Medium cap 30 [30 FPS, CPU 1.6–4.4 ms, 50–82 calls, 28–45k tris, 169 chunks, q=0, no errors]; Low preset not yet manually tested) |
+| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; M pass for lake & shoreline on Mali-G57 MC2 Ultra & Medium; rivers, waterfall, and Low preset not yet manually tested) |
 | 3.6 | `Collision`: spatial hash (circles, boxes), push-out resolution | U | [x] (U pass) |
-| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [~] (U+T+B pass; awaiting M on device) |
-| 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips | [~] (U+T+B pass; awaiting M on device) |
-| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [~] (U+T+B pass; awaiting M on device) |
-| 3.10 | `KeyboardMouseInput` (WASD, Space, Shift, E, I, C, Esc, pointer lock) | M (desktop; may be untested, see R2) | [ ] |
-| 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [ ] |
-| 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [ ] |
+| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for Idle, Walk, Run, Sprint, Crouch, ground snap; Jump, swim, and world-boundary walk not yet manually tested on device) |
+| 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips | [x] (U+T+B+M pass on Mali-G57 MC2 Medium: third-person orbit follow & terrain/collider avoidance verified, 30 FPS, no errors) |
+| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [~] (U+T+B pass; M pass on Mali-G57 MC2 Medium for Idle, Walk, Run, Sprint, Crouch, Gather pose; Jump/Fall/Land, Drink, and Swim poses not yet manually tested on device) |
+| 3.10 | `KeyboardMouseInput` (WASD, Space, Shift, E, I, C, Esc, pointer lock) | M (desktop; may be untested, see R2) | [~] (U+T+B pass; desktop browser M untested on Termux per R2) |
+| 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [~] (U+T+B pass for dead-zone, direction mapping, per-pointerId multitouch & pinch-zoom; awaiting M on Android Chrome) |
+| 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [~] (U+T+B pass; D pass on Ultra & Medium for chunk streaming; awaiting M on device for full TouchControlsUI walk to boundaries) |
 
 **Recorded polish notes from Phase 3 Group A device test (deferred — do not work on now):**
 - [ ] **Phase 4 lighting/vegetation polish:** Trees appear too dark under current lighting (address in Phase 4 with `Environment` tree shading and `DayNightCycle` hemisphere/sun lighting).

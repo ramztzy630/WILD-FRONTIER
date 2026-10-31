@@ -1,9 +1,9 @@
 /**
  * Top-level wiring and lifecycle (ARCHITECTURE.md §3).
  *
- * Phase 2 scope: state machine, loop, renderer, presets, adaptive resolution,
- * diagnostics, and the foundation verification scene. Later phases plug the
- * world, player, systems, and full UI into the same hooks.
+ * Connects the state machine, fixed-step loop, renderer, graphics presets,
+ * adaptive resolution, diagnostics, world/player simulation, and unified
+ * desktop + mobile input (`InputManager` + `TouchControlsUI`).
  */
 
 import { AssetManager } from "./AssetManager.ts";
@@ -20,11 +20,13 @@ import {
   type GraphicsPreset,
   type PresetName,
 } from "./GraphicsSettings.ts";
+import { InputManager } from "./InputManager.ts";
 import { AdaptiveResolution, FrameStats } from "./PerformanceMonitor.ts";
 import { SceneManager } from "./SceneManager.ts";
 import { DiagnosticsUI, type DiagnosticsData } from "../ui/DiagnosticsUI.ts";
 import type { ErrorOverlay } from "../ui/ErrorOverlay.ts";
 import { FoundationScreens } from "../ui/FoundationScreens.ts";
+import { TouchControlsUI } from "../ui/TouchControlsUI.ts";
 
 export interface GameEvents {
   "state:changed": { to: GameStateName; from: GameStateName };
@@ -46,6 +48,7 @@ interface PerformanceMemory {
 export class Game {
   readonly bus = new EventBus<GameEvents>();
   readonly assets = new AssetManager();
+  readonly input: InputManager;
   private readonly device: DeviceInfo;
   private readonly errors: ErrorOverlay;
   private readonly sceneManager: SceneManager;
@@ -55,6 +58,7 @@ export class Game {
   private readonly adaptive = new AdaptiveResolution();
   private readonly diagnostics: DiagnosticsUI;
   private readonly screens: FoundationScreens;
+  private readonly touchUI: TouchControlsUI;
   private readonly world: FoundationScene;
 
   private readonly detectedPreset: PresetName;
@@ -89,6 +93,11 @@ export class Game {
     this.states = new GameStateMachine((to, from) => this.onStateChanged(to, from));
     this.world = new FoundationScene(this.sceneManager.scene, this.assets, options.seed);
 
+    this.input = new InputManager(this.device.mobile || this.device.touch);
+    this.input.setGameplayEnabled(false);
+    this.input.keyboard.attach(viewport);
+    this.touchUI = new TouchControlsUI(ui, this.input.touch);
+
     this.screens = new FoundationScreens(ui, {
       onStart: () => this.startSession(),
       onPause: () => this.states.transition("paused"),
@@ -97,12 +106,6 @@ export class Game {
       onPreset: (p) => this.setPreset(p),
       onFpsCap: (c) => this.setFpsCap(c),
       onAdaptive: (on) => this.setAdaptive(on),
-      // TEMP DEBUG (Phase 3 Kelompok B only — replaced by 3.10/3.11 in Kelompok C)
-      onTempDebugMode: (mode) => this.world.setTempDebugMode(mode),
-      onTempDebugJump: () => this.world.triggerTempDebugJump(),
-      onTempDebugGather: () => this.world.triggerTempDebugGather(),
-      onTempDebugDrink: () => this.world.triggerTempDebugDrink(),
-      onTempDebugReset: () => this.world.resetPlayerToSpawn(),
     });
     this.diagnostics = new DiagnosticsUI(ui, options.diagnosticsExpanded);
 
@@ -142,8 +145,7 @@ export class Game {
     };
 
     this.applyPreset(this.preset, this.preset.defaultFpsCap);
-    this.bindGlobalInput();
-    this.bindTempDebugCameraDrag(viewport);
+    this.bindGlobalInput(root);
   }
 
   start(): void {
@@ -173,7 +175,19 @@ export class Game {
   }
 
   private onStateChanged(to: GameStateName, from: GameStateName): void {
+    const playing = to === "playing";
     this.loop.setSimulationPaused(to === "paused");
+    this.input.setGameplayEnabled(playing);
+    if (!playing) {
+      this.input.resetAll(to === "paused");
+      if (from === "playing" && typeof document !== "undefined" && document.pointerLockElement) {
+        try {
+          document.exitPointerLock?.();
+        } catch {
+          // Ignore if unsupported
+        }
+      }
+    }
     this.screens.showState(to);
     this.diagData.state = to;
     this.bus.emit("state:changed", { to, from });
@@ -183,11 +197,56 @@ export class Game {
 
   private fixedUpdate(dt: number): void {
     this.simStepsThisSecond++;
-    this.world.fixedUpdate(dt);
+    if (this.states.state !== "playing") {
+      this.world.fixedUpdate(dt);
+      return;
+    }
+
+    this.input.setInteractAvailable(this.world.player.controller.waterState.canDrink);
+    const stepInput = this.input.consumeStepState();
+
+    if (stepInput.pausePressed) {
+      this.states.transition("paused");
+      return;
+    }
+
+    if (stepInput.inventoryPressed) {
+      this.touchUI.showToast("Inventory unlocks in Phase 5", 1.8);
+    }
+
+    this.world.fixedUpdate(dt, stepInput);
+    this.input.setInteractAvailable(this.world.player.controller.waterState.canDrink);
+
+    if (this.world.justDrankWater) {
+      this.touchUI.showToast("Refreshing — drank cool water", 1.8);
+    }
   }
 
   private frameUpdate(frameDt: number, alpha: number): void {
-    this.world.frameUpdate(frameDt, alpha, this.sceneManager.camera, this.states.state !== "playing");
+    const isPlaying = this.states.state === "playing";
+    const look = this.input.consumeLookDelta();
+    if (isPlaying) {
+      if (look.deltaYaw !== 0 || look.deltaPitch !== 0) {
+        this.world.player.camera.applyLook(look.deltaYaw, look.deltaPitch);
+      }
+      if (look.deltaZoom !== 0) {
+        this.world.player.camera.applyZoom(look.deltaZoom);
+      }
+    }
+
+    this.world.frameUpdate(frameDt, alpha, this.sceneManager.camera, !isPlaying);
+
+    const ctrl = this.world.player.controller;
+    this.touchUI.update(frameDt, {
+      visible: isPlaying,
+      scheme: this.input.activeScheme,
+      canDrink: ctrl.waterState.canDrink,
+      nearBoundary: ctrl.nearBoundary,
+      boundaryMessage: ctrl.boundaryMessage,
+      sprintActive: this.input.touch.isSprintToggled() || ctrl.sprinting,
+      crouchActive: ctrl.crouching || this.input.touch.isCrouchToggled() || this.input.keyboard.isCrouchToggled(),
+      jumpPressed: this.input.touch.isButtonPressed("jump"),
+    });
   }
 
   private onFrameStats(deltaMs: number, workMs: number): void {
@@ -291,7 +350,18 @@ export class Game {
 
   // --- Browser integration -------------------------------------------------
 
-  private bindGlobalInput(): void {
+  private bindGlobalInput(root: HTMLElement): void {
+    // Switch to touch scheme automatically whenever a touch pointer interacts
+    root.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.pointerType === "touch") {
+          this.input.setScheme("touch");
+        }
+      },
+      { passive: true },
+    );
+
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         if (this.states.state === "playing") this.states.transition("paused");
@@ -300,6 +370,7 @@ export class Game {
         this.loop.start();
       }
     });
+
     window.addEventListener("keydown", (event) => {
       if (event.repeat) return;
       if (event.key === "Escape") {
@@ -311,40 +382,5 @@ export class Game {
         this.lastStatsVersion = -1;
       }
     });
-  }
-
-  /**
-   * TEMP DEBUG INPUT (Phase 3 Kelompok B only — NOT a replacement for Tasks 3.10–3.12):
-   * Lets the user drag on the viewport in `playing` state to orbit `CameraController`
-   * around `Player` so Tasks 3.7–3.9 can be verified before Kelompok C.
-   */
-  private bindTempDebugCameraDrag(viewport: HTMLElement): void {
-    let activePointerId: number | null = null;
-    let lastX = 0;
-    let lastY = 0;
-
-    viewport.addEventListener("pointerdown", (e) => {
-      if (this.states.state !== "playing" || activePointerId !== null) return;
-      activePointerId = e.pointerId;
-      lastX = e.clientX;
-      lastY = e.clientY;
-    });
-
-    viewport.addEventListener("pointermove", (e) => {
-      if (e.pointerId !== activePointerId || this.states.state !== "playing") return;
-      const dx = e.clientX - lastX;
-      const dy = e.clientY - lastY;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      this.world.player.camera.applyLook(-dx * 0.007, dy * 0.006);
-    });
-
-    const release = (e: PointerEvent) => {
-      if (e.pointerId === activePointerId) {
-        activePointerId = null;
-      }
-    };
-    viewport.addEventListener("pointerup", release);
-    viewport.addEventListener("pointercancel", release);
   }
 }

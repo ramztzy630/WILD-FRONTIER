@@ -205,7 +205,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--s-2);
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 20px;
   border-radius: var(--r-md);
   border: 1px solid transparent;
@@ -260,7 +260,7 @@ body {
 }
 
 .btn-sm {
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 14px;
 }
 
@@ -277,14 +277,14 @@ body {
   appearance: none;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--r-pill);
   border: 1.5px solid var(--c-line-strong);
-  background: rgba(21, 26, 21, 0.7);
+  background: rgba(21, 26, 21, 0.76);
   color: var(--c-text);
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
   transition: transform var(--m-fast) var(--ease-out);
 }
 
@@ -389,62 +389,364 @@ body {
 /* HUD pause button */
 .hud-pause {
   position: absolute;
-  z-index: var(--z-hud);
+  z-index: calc(var(--z-touch) + 2);
   top: calc(var(--s-3) + var(--safe-t));
   right: calc(var(--s-3) + var(--safe-r));
 }
 
-/* TEMP DEBUG bar (Phase 3 Kelompok B only — removed in Kelompok C) */
-.temp-debug-bar {
+/* ---------- Gameplay Input HUD & Touch Controls (DESIGN-SYSTEM.md §7.5, §7.6) ---------- */
+
+.gameplay-input-hud {
   position: absolute;
-  z-index: var(--z-hud);
-  left: 50%;
-  bottom: calc(var(--s-2) + var(--safe-b));
-  transform: translateX(-50%);
-  max-width: calc(100vw - var(--s-4));
+  inset: 0;
+  z-index: var(--z-touch);
+  pointer-events: none;
+}
+
+.touch-controls-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.touch-zone-left {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-zone-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 55%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-joy-base {
+  position: absolute;
+  left: calc(84px + var(--safe-l));
+  bottom: calc(86px + var(--safe-b));
+  width: 120px;
+  height: 120px;
+  margin-left: -60px;
+  margin-top: -60px;
+  border-radius: 50%;
+  border: 1.5px solid var(--c-line-strong);
+  background: rgba(21, 26, 21, 0.28);
+  box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0.72;
+  transition: opacity var(--m-fast) var(--ease-out);
+}
+
+.touch-joy-base[data-active="true"] {
+  bottom: auto;
+  opacity: 1;
+  border-color: rgba(224, 138, 60, 0.65);
+  background: rgba(21, 26, 21, 0.45);
+}
+
+.touch-joy-knob {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(236, 228, 208, 0.55);
+  background: rgba(236, 228, 208, 0.72);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.touch-joy-base[data-active="true"] .touch-joy-knob {
+  background: rgba(224, 138, 60, 0.88);
+  border-color: var(--c-text);
+}
+
+.touch-look-hint {
+  position: absolute;
+  top: calc(64px + var(--safe-t));
+  right: calc(var(--s-4) + var(--safe-r));
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: rgba(13, 15, 12, 0.58);
+  color: var(--c-text-dim);
+  font: 500 var(--t-micro) / 1.2 var(--f-ui);
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+/* Ergonomic right-side action cluster: all buttons >= 48x48 px */
+.touch-actions {
+  position: absolute;
+  right: calc(18px + var(--safe-r));
+  bottom: calc(18px + var(--safe-b));
+  width: 196px;
+  height: 176px;
+  pointer-events: none;
+}
+
+.touch-btn {
+  appearance: none;
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s-1);
-  padding: var(--s-2);
-  border-radius: var(--r-md);
-  border: 1px dashed var(--c-ember);
-  background: rgba(13, 15, 12, 0.84);
+  justify-content: center;
+  gap: 1px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 2px;
+  border-radius: 50%;
+  border: 1.5px solid var(--c-line-strong);
+  background: rgba(21, 26, 21, 0.76);
+  color: var(--c-text);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+  transition:
+    transform var(--m-fast) var(--ease-out),
+    opacity var(--m-fast) var(--ease-out);
 }
 
-.temp-debug-tag {
-  font: 600 10px / 1.2 var(--f-mono);
+.touch-btn:active:not(:disabled),
+.touch-btn[data-pressed="true"]:not(:disabled) {
+  transform: scale(0.92);
+  border-color: var(--c-ember-strong);
+}
+
+.touch-btn[aria-pressed="true"] {
+  background: linear-gradient(180deg, #e08a3c, #b96523);
+  border-color: var(--c-ember-strong);
+  color: var(--c-ink-900);
+}
+
+.touch-btn:disabled,
+.touch-btn[aria-disabled="true"] {
+  opacity: 0.44;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.touch-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.touch-btn-label {
+  font: 700 10px / 1.05 var(--f-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.touch-btn-sub {
+  font: 600 8.5px / 1 var(--f-mono);
+  color: var(--c-text-dim);
+  letter-spacing: 0.02em;
+}
+
+.touch-btn[aria-pressed="true"] .touch-btn-sub {
+  color: var(--c-ink-900);
+}
+
+/* Individual arc positions in landscape (all >= 52x52 px) */
+.touch-btn-jump {
+  width: 64px;
+  height: 64px;
+  right: 0;
+  bottom: 0;
+  border-color: rgba(224, 138, 60, 0.55);
+}
+
+.touch-btn-interact {
+  width: 60px;
+  height: 60px;
+  right: 4px;
+  bottom: 76px;
+}
+
+.touch-btn-interact:not(:disabled) {
+  border-color: var(--c-river);
+  background: rgba(22, 46, 54, 0.85);
+}
+
+.touch-btn-sprint {
+  width: 56px;
+  height: 56px;
+  right: 76px;
+  bottom: 4px;
+}
+
+.touch-btn-crouch {
+  width: 56px;
+  height: 56px;
+  right: 72px;
+  bottom: 70px;
+}
+
+.touch-btn-inventory {
+  width: 52px;
+  height: 52px;
+  right: 138px;
+  bottom: 12px;
+}
+
+/* HUD contextual water prompt, boundary warning banner, toast & desktop hint */
+.hud-prompt {
+  appearance: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(88px + var(--safe-b));
+  transform: translateX(-50%);
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--c-river);
+  background: rgba(16, 26, 30, 0.88);
+  color: var(--c-text);
+  box-shadow: var(--shadow-panel);
+  font: 600 var(--t-label) / 1 var(--f-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.hud-prompt-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  background: var(--c-river);
+  color: var(--c-ink-900);
+  font: 700 11px / 1 var(--f-mono);
+}
+
+.hud-boundary-banner {
+  position: absolute;
+  top: calc(64px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(460px, calc(100vw - 32px));
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-gold);
+  background: rgba(16, 20, 16, 0.88);
   color: var(--c-gold);
-  letter-spacing: 0.04em;
+  font: 600 var(--t-label) / 1.3 var(--f-ui);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: center;
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
 }
 
-.temp-debug-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--s-1);
+.hud-toast-chip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(144px + var(--safe-b));
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-moss);
+  background: rgba(16, 22, 16, 0.9);
+  color: var(--c-moss);
+  font: 600 var(--t-micro) / 1.2 var(--f-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
-.temp-debug-btn {
-  appearance: none;
-  min-height: 44px;
-  min-width: 52px;
-  padding: 0 var(--s-2);
+.hud-desktop-hint {
+  position: absolute;
+  left: calc(var(--s-3) + var(--safe-l));
+  bottom: calc(var(--s-3) + var(--safe-b));
+  max-width: calc(100vw - 32px);
+  padding: 6px 12px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--c-line-strong);
-  background: var(--c-ink-700);
-  color: var(--c-text);
-  font: 600 11px / 1 var(--f-mono);
-  cursor: pointer;
-  touch-action: manipulation;
+  border: 1px solid var(--c-line);
+  background: rgba(13, 15, 12, 0.68);
+  color: var(--c-text-dim);
+  font: 500 11px / 1.3 var(--f-mono);
+  pointer-events: none;
 }
 
-.temp-debug-btn[aria-pressed="true"] {
-  background: var(--c-ember);
-  border-color: var(--c-ember);
-  color: var(--c-ink-900);
+/* Portrait phone layout (DESIGN-SYSTEM.md §7.6, §8) */
+@media (orientation: portrait) {
+  .touch-zone-left {
+    width: 50%;
+  }
+  .touch-zone-right {
+    width: 50%;
+  }
+  .touch-joy-base {
+    left: calc(74px + var(--safe-l));
+    bottom: calc(82px + var(--safe-b));
+    width: 112px;
+    height: 112px;
+    margin-left: -56px;
+    margin-top: -56px;
+  }
+  .touch-actions {
+    right: calc(12px + var(--safe-r));
+    bottom: calc(16px + var(--safe-b));
+    width: 176px;
+    height: 184px;
+  }
+  .touch-btn-jump {
+    width: 60px;
+    height: 60px;
+    right: 0;
+    bottom: 0;
+  }
+  .touch-btn-interact {
+    width: 56px;
+    height: 56px;
+    right: 2px;
+    bottom: 68px;
+  }
+  .touch-btn-sprint {
+    width: 52px;
+    height: 52px;
+    right: 68px;
+    bottom: 4px;
+  }
+  .touch-btn-crouch {
+    width: 52px;
+    height: 52px;
+    right: 66px;
+    bottom: 64px;
+  }
+  .touch-btn-inventory {
+    width: 50px;
+    height: 50px;
+    right: 4px;
+    bottom: 132px;
+  }
+  .hud-prompt {
+    bottom: calc(212px + var(--safe-b));
+  }
+  .hud-toast-chip {
+    bottom: calc(268px + var(--safe-b));
+  }
 }
 
 /* ---------- Form controls (DESIGN-SYSTEM.md §7.8) ---------- */
@@ -480,7 +782,7 @@ body {
 .seg-btn {
   appearance: none;
   flex: 1 1 0;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 var(--s-2);
   border: 0;
   border-left: 1px solid var(--c-line);
@@ -511,14 +813,14 @@ body {
   background: var(--c-ink-700);
   cursor: pointer;
   touch-action: manipulation;
-  /* Larger invisible hit area (44 px). */
-  outline-offset: 7px;
+  /* Larger invisible hit area (>= 48 px). */
+  outline-offset: 9px;
 }
 
 .switch::before {
   content: "";
   position: absolute;
-  inset: -8px -4px;
+  inset: -10px -4px;
 }
 
 .switch-thumb {
@@ -560,7 +862,7 @@ body {
 .diag-chip {
   appearance: none;
   min-width: 64px;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 var(--s-3);
   border-radius: var(--r-sm);
   border: 1px solid var(--c-line);

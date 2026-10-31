@@ -1,11 +1,8 @@
 /**
- * World scene (Phase 3 Kelompok A + B: procedural terrain, chunk streaming,
+ * World scene (Phase 3: procedural terrain, chunk streaming,
  * lake/rivers/waterfall water system, spatial-hash collision, and third-person
- * Player + CameraController + procedural CharacterModel + AnimationController).
- *
- * Includes a clearly marked temporary debug locomotion hook for Kelompok B
- * verification prior to Kelompok C (Tasks 3.10–3.12: KeyboardMouseInput &
- * TouchInput).
+ * Player + CameraController + procedural CharacterModel + AnimationController
+ * driven by InputManager).
  */
 
 import {
@@ -31,6 +28,7 @@ import {
 } from "three";
 import type { AssetManager } from "./AssetManager.ts";
 import { getPreset, type GraphicsPreset } from "./GraphicsSettings.ts";
+import type { InputStepState } from "./InputManager.ts";
 import { Random } from "./Random.ts";
 import { TAU, lerp } from "./math.ts";
 import { Player } from "../player/Player.ts";
@@ -46,12 +44,17 @@ const SKY = 0xa9b9b4;
 
 type MatKind = "foliage" | "bark" | "stone";
 
-/**
- * TEMP DEBUG (Phase 3 Kelompok B only — not a replacement for 3.10–3.12):
- * Allows verifying PlayerController & AnimationController states before
- * KeyboardMouseInput and TouchInput are added in Kelompok C.
- */
-export type TempDebugLocomotionMode = "idle" | "walk" | "run" | "sprint" | "crouch";
+const IDLE_STEP_INPUT: InputStepState = {
+  moveX: 0,
+  moveZ: 0,
+  sprint: false,
+  crouch: false,
+  jumpHeld: false,
+  jumpPressed: false,
+  interactPressed: false,
+  inventoryPressed: false,
+  pausePressed: false,
+};
 
 export class FoundationScene {
   readonly generator: WorldGenerator;
@@ -60,6 +63,7 @@ export class FoundationScene {
   readonly terrain: Terrain;
   readonly water: Water;
   readonly player: Player;
+  justDrankWater = false;
 
   private readonly scene: Scene;
   private readonly assets: AssetManager;
@@ -82,10 +86,6 @@ export class FoundationScene {
   private probePrevAngle = 0;
   private orbit = 0;
   private readonly lookTarget = new Vector3();
-
-  // --- TEMP DEBUG state (Phase 3 Kelompok B only; removed in Kelompok C) ---
-  private debugMode: TempDebugLocomotionMode = "idle";
-  private debugJumpPending = false;
 
   constructor(scene: Scene, assets: AssetManager, seed: number) {
     this.scene = scene;
@@ -224,36 +224,10 @@ export class FoundationScene {
     scene.add(this.root);
   }
 
-  // --- TEMP DEBUG hooks (Phase 3 Kelompok B only) --------------------------
-
-  setTempDebugMode(mode: TempDebugLocomotionMode): void {
-    this.debugMode = mode;
-  }
-
-  getTempDebugMode(): TempDebugLocomotionMode {
-    return this.debugMode;
-  }
-
-  triggerTempDebugJump(): void {
-    this.debugJumpPending = true;
-  }
-
-  triggerTempDebugGather(): void {
-    this.player.anim.triggerGather("chop");
-  }
-
-  triggerTempDebugDrink(): void {
-    this.player.anim.triggerDrink();
-  }
-
   resetPlayerToSpawn(): void {
-    this.debugMode = "idle";
-    this.debugJumpPending = false;
     this.player.controller.setPosition(this.spawnX, this.spawnZ, 0);
     this.player.camera.snapToTarget(this.spawnX, this.spawnY, this.spawnZ, false);
   }
-
-  // -------------------------------------------------------------------------
 
   /** Applies the scene-level part of a graphics preset (shadows, material tier, view distance). */
   applyPreset(preset: GraphicsPreset): void {
@@ -279,31 +253,27 @@ export class FoundationScene {
     this.terrain.applyPreset(preset);
   }
 
-  /** Fixed 60 Hz step. */
-  fixedUpdate(dt: number): void {
+  /** Fixed 60 Hz step driven by `InputManager`. */
+  fixedUpdate(dt: number, stepInput: InputStepState = IDLE_STEP_INPUT): void {
     this.probePrevAngle = this.probeAngle;
     this.probeAngle += dt * 1.6;
+    this.justDrankWater = false;
 
-    const jumpPressed = this.debugJumpPending;
-    this.debugJumpPending = false;
-
-    const moveZ =
-      this.debugMode === "idle"
-        ? 0
-        : this.debugMode === "walk"
-          ? 0.5
-          : 1.0;
-
-    const input: PlayerMoveInput = {
-      moveX: 0,
-      moveZ,
+    const moveInput: PlayerMoveInput = {
+      moveX: stepInput.moveX,
+      moveZ: stepInput.moveZ,
       cameraYaw: this.player.camera.yaw,
-      sprint: this.debugMode === "sprint",
-      crouch: this.debugMode === "crouch",
-      jumpPressed,
+      sprint: stepInput.sprint,
+      crouch: stepInput.crouch,
+      jumpPressed: stepInput.jumpPressed,
     };
 
-    this.player.fixedUpdate(dt, input);
+    this.player.fixedUpdate(dt, moveInput);
+
+    if (stepInput.interactPressed && this.player.controller.waterState.canDrink) {
+      this.player.anim.triggerDrink();
+      this.justDrankWater = true;
+    }
   }
 
   /** Per rendered frame: interpolation, third-person camera, chunk streaming, water waves. */
