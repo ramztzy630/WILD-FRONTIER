@@ -19,6 +19,10 @@ export interface DiagnosticsData {
   geometries: number;
   textures: number;
   textureMB: number;
+  activeChunks: number;
+  pendingChunks: number;
+  pooledChunks: number;
+  chunkUploadMs: number;
   pixelRatio: number;
   pixelRange: string;
   adaptive: boolean;
@@ -33,7 +37,7 @@ export interface DiagnosticsData {
   heapMB: number | null;
 }
 
-const LINE_KEYS = ["frame", "work", "draw", "mem", "res", "preset", "state", "gpu"] as const;
+const LINE_KEYS = ["frame", "work", "draw", "chunks", "mem", "res", "preset", "state", "gpu"] as const;
 type LineKey = (typeof LINE_KEYS)[number];
 
 export class DiagnosticsUI {
@@ -91,6 +95,10 @@ export class DiagnosticsUI {
     setText(l.frame, `frame ${d.avgFrameMs.toFixed(1)} ms · worst ${d.worstFrameMs.toFixed(1)} ms`);
     setText(l.work, `cpu ${d.avgWorkMs.toFixed(2)} ms · sim ${d.simSteps}/s`);
     setText(l.draw, `calls ${d.calls} · tris ${formatCount(d.triangles)}`);
+    setText(
+      l.chunks,
+      `chunks ${d.activeChunks} (+${d.pendingChunks} q · ${d.pooledChunks} pool · ${d.chunkUploadMs.toFixed(2)} ms)`,
+    );
     setText(
       l.mem,
       `geo ${d.geometries} · tex ${d.textures} (${d.textureMB.toFixed(1)} MB)` +

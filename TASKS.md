@@ -28,35 +28,35 @@ User decisions (2026-10-31), recorded in ARCHITECTURE.md:
 | 2.1 | `package.json` with pinned `three@0.187.0`, `@types/three@0.187.0`, `typescript@6.0.3`, `vite@7.3.7`; scripts `dev` (`--host`), `build`, `preview`, `typecheck`, `test` | install succeeds on Termux | [x] |
 | 2.2 | Record actual installed versions and native bindings in ARCHITECTURE.md §1.4 | B | [x] |
 | 2.3 | `tsconfig.json`: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `noEmit` | T | [x] |
-| 2.4 | `index.html` (viewport no-zoom, theme colour), `styles/main.css` with design tokens and gesture blocking | M | [~] (T+B pass; awaiting M on Android Chrome) |
-| 2.5 | `main.ts` boot: WebGL capability check + styled fallback screen with a working Retry | M (simulate by forcing failure flag) | [~] (T+B pass; awaiting M with `?nowebgl=once`) |
+| 2.4 | `index.html` (viewport no-zoom, theme colour), `styles/main.css` with design tokens and gesture blocking | M | [~] (T+B pass; pull-to-refresh & pinch-zoom blocking not yet manually tested) |
+| 2.5 | `main.ts` boot: WebGL capability check + styled fallback screen with a working Retry | M (simulate by forcing failure flag) | [~] (T+B pass; `?nowebgl=once` & Retry button not yet manually tested) |
 | 2.6 | `EventBus`, `math`, `Random` (seeded PRNG) | U | [x] |
-| 2.7 | `GameLoop`: rAF, clamped dt, fixed 60 Hz step with accumulator, FPS cap, pause on `visibilitychange` | U (accumulator logic), M | [x] (U pass; M pending on device) |
-| 2.8 | `SceneManager`: renderer, camera, resize/orientation handling, pixel ratio control | M | [~] (T+B pass; awaiting M on device) |
+| 2.7 | `GameLoop`: rAF, clamped dt, fixed 60 Hz step with accumulator, FPS cap, pause on `visibilitychange` | U (accumulator logic), M | [x] (U+M pass on Mali-G57 MC2: 30 FPS cap & 90 FPS uncapped) |
+| 2.8 | `SceneManager`: renderer, camera, resize/orientation handling, pixel ratio control | M | [~] (T+B+M render pass; portrait/landscape rotation not yet manually tested) |
 | 2.9 | `AssetManager`: shared geometry/material/texture registry, procedural texture helpers, dispose | T | [x] (T+U pass) |
-| 2.10 | `DeviceProfile` + `GraphicsSettings` (Low/Medium/High/Ultra tables, apply at runtime) | U (preset selection), M | [x] (U pass; M pending on device) |
+| 2.10 | `DeviceProfile` + `GraphicsSettings` (Low/Medium/High/Ultra tables, apply at runtime) | U (preset selection), M | [x] (U+M pass on Mali-G57 MC2: Medium 30 FPS, Ultra 90 FPS, live preset switch) |
 | 2.11 | `PerformanceMonitor` + adaptive resolution controller with hysteresis | U | [x] |
-| 2.12 | `DiagnosticsUI`: FPS/frame ms/draw calls/triangles/pixel ratio + error overlay (window errors, rejections) | M | [~] (T+B pass; awaiting M on device) |
-| 2.13 | `Game` state machine skeleton (Boot → MainMenu → Loading → Playing ⇄ Paused), with a minimal test scene that proves the loop renders | M | [~] (U+T+B pass; awaiting M on device) |
+| 2.12 | `DiagnosticsUI`: FPS/frame ms/draw calls/triangles/pixel ratio + error overlay (window errors, rejections) | M | [x] (T+B+M pass: diagnostics visible, no errors) |
+| 2.13 | `Game` state machine skeleton (Boot → MainMenu → Loading → Playing ⇄ Paused), with a minimal test scene that proves the loop renders | M | [x] (U+T+B+M pass on Android Chrome) |
 | 2.14 | `node --test` setup with first tests passing | U | [x] (52/52 tests pass) |
-| 2.15 | Gate: T + B + U pass; user confirms the test scene runs in Android Chrome with diagnostics visible | T B U M | [~] (T+B+U pass; awaiting user M confirmation) |
+| 2.15 | Gate: T + B + U pass; user confirms the test scene runs in Android Chrome with diagnostics visible | T B U M | [x] (Confirmed on Android Chrome Mali-G57 MC2, 2026-10-31) |
 
 ## Phase 3 — World and player
 
-| # | Task | Verify |
-|---|---|---|
-| 3.1 | `Noise` (seeded simplex, fBm, ridged) | U determinism |
-| 3.2 | `Heightfield` + `WorldGenerator` macro layout (mountains, valley, lake basin, river splines + carving, boundary ring, POI placement) | U same seed gives identical output |
-| 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M |
-| 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M |
-| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M |
-| 3.6 | `Collision`: spatial hash (circles, boxes), push-out resolution | U |
-| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M |
-| 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips |
-| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M |
-| 3.10 | `KeyboardMouseInput` (WASD, Space, Shift, E, I, C, Esc, pointer lock) | M (desktop; may be untested, see R2) |
-| 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once |
-| 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D |
+| # | Task | Verify | Status |
+|---|---|---|---|
+| 3.1 | `Noise` (seeded simplex, fBm, ridged) | U determinism | [x] (U pass) |
+| 3.2 | `Heightfield` + `WorldGenerator` macro layout (mountains, valley, lake basin, river splines + carving, boundary ring, POI placement) | U same seed gives identical output | [x] (U pass) |
+| 3.3 | `ChunkWorker`: chunk geometry (3 LODs + skirts) and material weights as transferables | U (pure builder), M | [~] (U+T+B pass; awaiting M on device) |
+| 3.4 | `Terrain`: chunk manager, LOD rings, time-sliced uploads, geometry pooling, blended terrain material | D no hitches, M | [~] (U+T+B pass; awaiting M+D on device) |
+| 3.5 | `Water`: lake plane + river ribbons + waterfall shader; shallow/deep water detection | M | [~] (U+T+B pass; awaiting M on device) |
+| 3.6 | `Collision`: spatial hash (circles, boxes), push-out resolution | U | [x] (U pass) |
+| 3.7 | `PlayerController`: walk/run/sprint/crouch/jump, damping, coyote time, jump buffer, gravity, ground snap, slope limit, swim, world-boundary soft stop | U (kinematics), M | [ ] |
+| 3.8 | `CameraController`: orbit follow, smoothing, zoom, terrain + collider avoidance, sensitivity, invert Y | M camera never clips | [ ] |
+| 3.9 | `CharacterModel` + `AnimationController` FSM: idle, walk, run, sprint, jump, fall, land, crouch, gather, swim, drink | U (FSM transitions), M | [ ] |
+| 3.10 | `KeyboardMouseInput` (WASD, Space, Shift, E, I, C, Esc, pointer lock) | M (desktop; may be untested, see R2) | [ ] |
+| 3.11 | `TouchInput` + `TouchControlsUI`: floating joystick, camera swipe, pinch zoom, buttons; multitouch by pointerId; gesture blocking | M multitouch move+look+jump at once | [ ] |
+| 3.12 | Gate: walk to every boundary; no falling through terrain; camera never clips; chunks stream without hitches (D) | M D | [ ] |
 
 ## Phase 4 — Environment
 

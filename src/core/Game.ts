@@ -117,6 +117,10 @@ export class Game {
       geometries: 0,
       textures: 0,
       textureMB: 0,
+      activeChunks: 0,
+      pendingChunks: 0,
+      pooledChunks: 0,
+      chunkUploadMs: 0,
       pixelRatio: 1,
       pixelRange: "",
       adaptive: true,
@@ -204,6 +208,7 @@ export class Game {
     const s = this.frameStats.snapshot;
     const r = this.sceneManager.getStats();
     const a = this.assets.stats();
+    const t = this.world.getTerrainStats();
     const d = this.diagData;
     d.fps = s.fps;
     d.avgFrameMs = s.avgFrameMs;
@@ -214,6 +219,10 @@ export class Game {
     d.geometries = r.geometries;
     d.textures = r.textures;
     d.textureMB = a.textureBytes / (1024 * 1024);
+    d.activeChunks = t.activeChunks;
+    d.pendingChunks = t.pendingChunks;
+    d.pooledChunks = t.pooledGeometries;
+    d.chunkUploadMs = t.lastUploadMs;
     d.pixelRatio = r.pixelRatio;
     d.pixelRange = `${this.pixelRange.min.toFixed(2)}–${this.pixelRange.max.toFixed(2)}`;
     d.adaptive = this.adaptive.isEnabled();
